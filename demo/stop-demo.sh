@@ -5,6 +5,6 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 cd "$DIR"
 
 echo "Остановка демонстрационного стенда SQL Explorer..."
-docker compose -f docker-compose.demo.yml down "$@"
+docker compose -f docker-compose.yml down "$@"
 
 echo "Стенд успешно остановлен."

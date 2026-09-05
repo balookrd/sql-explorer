@@ -17,7 +17,7 @@
 ```
 *Или через docker compose напрямую:*
 ```bash
-docker compose -f demo/docker-compose.demo.yml up -d --build
+docker compose -f demo/docker-compose.yml up -d --build
 ```
 
 После запуска откройте веб-интерфейс:

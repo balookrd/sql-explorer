@@ -64,7 +64,7 @@ sql-explorer/
 │       └── README.md         # Руководство по установке чарта
 │
 ├── demo/                     # Автономный демонстрационный стенд (Docker Compose)
-│   ├── docker-compose.demo.yml # Trino, Hive, Metastore, OpenLDAP, MIT KDC, SQL Explorer
+│   ├── docker-compose.yml      # Trino, Hive, Metastore, OpenLDAP, MIT KDC, SQL Explorer
 │   ├── start-demo.sh         # Скрипт запуска стенда
 │   └── stop-demo.sh          # Скрипт остановки стенда
 │
