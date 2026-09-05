@@ -59,7 +59,7 @@
         <Database class="w-5 h-5" />
       </div>
       <div>
-        <h2 class="text-lg font-bold tracking-tight text-slate-900">Вход в SQL Explorer</h2>
+        <h2 class="text-lg font-bold tracking-tight text-slate-900">Вход в SQL Web Explorer</h2>
         <p class="text-xs text-slate-500">Trino & Hive Enterprise Web Portal</p>
       </div>
     </div>

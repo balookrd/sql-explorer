@@ -29,7 +29,7 @@
     </div>
     <div class="flex flex-col">
       <span class="text-base font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent flex items-center gap-1.5">
-        SQL Explorer
+        SQL Web Explorer
         <span class="text-[10px] px-2 py-0.5 rounded-full font-mono bg-sky-50 text-sky-700 border border-sky-200">
           Trino & Hive
         </span>
