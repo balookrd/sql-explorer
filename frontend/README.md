@@ -1,47 +1,82 @@
-# Svelte + TS + Vite
+# Frontend: SQL Web Explorer
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+Современный веб-интерфейс для работы с распределенными аналитическими движками (Trino, Apache Hive), построенный на **Svelte 5** с использованием реактивной модели **Runes**, **TypeScript**, **Monaco Editor** и **Tailwind CSS**.
 
-## Recommended IDE Setup
+---
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## Технологический стек
 
-## Need an official Svelte framework?
+- **Фреймворк**: [Svelte 5](https://svelte.dev/) (новая реактивность: `$state`, `$derived`, `$props`, `$effect`).
+- **Сборщик**: [Vite](https://vitejs.dev/) c HMR и быстрой оптимизацией зависимостей.
+- **Редактор кода**: [Monaco Editor](https://microsoft.github.io/monaco-editor/) (движок VS Code) с подсветкой SQL, автодополнением и горячими клавишами.
+- **Стилизация**: [Tailwind CSS](https://tailwindcss.com/) — современная корпоративная светлая тема, аккуратные 6px скроллбары, системные шрифты `Inter` и `JetBrains Mono`.
+- **Иконки**: [Lucide Svelte](https://lucide.dev/).
+- **Связь с сервером**: REST API + Server-Sent Events (SSE) для стриминга прогресса и статусов запросов в реальном времени.
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+---
 
-## Technical considerations
+## Архитектура компонентов (`src/`)
 
-**Why use this over SvelteKit?**
+```
+frontend/src/
+├── api/
+│   └── client.ts              # Типизированный клиент API, SSE стриминг и управление сессией
+├── components/
+│   ├── Header.svelte          # Шапка: выбор кластера, doAs плашка, профиль и группы LDAP
+│   ├── Sidebar.svelte         # Дерево схемы (Каталог -> Схема -> Таблица -> Колонки)
+│   ├── SqlEditor.svelte       # Monaco Editor с поддержкой мульти-запросов и шорткатов
+│   ├── QueryToolbar.svelte    # Тулбар запуска («Run», «Stop», «Save», лимиты)
+│   ├── ResultsGrid.svelte     # Таблица результатов, фильтрация, пагинация, CSV/JSON экспорт
+│   ├── QueueView.svelte       # Фоновая очередь задач, отмена и загрузка архива результатов
+│   └── LoginModal.svelte      # Модальное окно входа (Kerberos SPNEGO SSO / LDAPS)
+├── utils/
+│   └── sqlSplitter.ts         # Утилита парсинга и разбивки мульти-запросов по точкам с запятой
+├── types.ts                   # TypeScript интерфейсы и типы данных
+├── app.css                    # Глобальные CSS-переменные темы и стили скроллбаров
+├── App.svelte                 # Главный контейнер приложения, вкладки запросов и раскладка
+└── main.ts                    # Точка входа приложения
+```
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+---
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+## Ключевые возможности интерфейса
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+1. **Многозадачность и вкладки**:
+   - Работа с несколькими запросами одновременно на разных вкладках.
+   - Возможность писать цепочки запросов, разделенные `;`.
+   - Запуск выделенного фрагмента текста либо запроса под курсором (`Cmd+Enter` / `Ctrl+Enter`).
+2. **Schema Explorer**:
+   - Ленивая подгрузка каталогов, схем и таблиц Trino и Hive.
+   - Мгновенная генерация сниппета `SELECT ... FROM ... LIMIT 50` по клику на таблицу.
+3. **Очередь задач (Background Execution)**:
+   - Запросы выполняются асинхронно на сервере; состояние сохраняется при перезагрузке страницы или закрытии браузера.
+   - Кнопка отмены активного запроса с прерыванием исполнения на кластере.
+   - Скачивание сохраненных результатов в сжатом виде.
+4. **Desktop Notifications**:
+   - Оповещение операционной системы о завершении выполнения запроса.
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+---
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+## Команды разработки
 
-**Why include `.vscode/extensions.json`?**
+### Установка зависимостей
+```bash
+npm install
+```
 
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
+### Запуск в режиме разработки (Dev Server)
+```bash
+npm run dev
+```
+Сервер разработки запустится на `http://localhost:5173`. Запросы к `/api` автоматически проксируются на бэкенд `http://localhost:8000`.
 
-**Why enable `allowJs` in the TS template?**
+### Сборка для продакшн
+```bash
+npm run build
+```
+Собранные статические файлы сохраняются в директорию `dist/` и готовы к раздаче сервером FastAPI или Nginx.
 
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+### Локальный предпросмотр сборки
+```bash
+npm run preview
 ```

@@ -100,16 +100,35 @@ ORDER BY total_revenue DESC;
 SELECT * FROM demo_db.employees;
 ```
 
+### 4. Мульти-запросы и запуск под курсором
+В редакторе можно ввести сразу несколько запросов:
+```sql
+SELECT 'first query' AS msg;
+
+SELECT 
+    nationkey, 
+    name 
+FROM tpch.sf1.nation 
+LIMIT 5;
+
+SELECT 'third query' AS msg;
+```
+- **Запуск под курсором**: поставьте курсор внутрь второго запроса и нажмите `Cmd+Enter` (или `Ctrl+Enter`) — выполнится именно этот запрос.
+- **Запуск выделения**: выделите мышью любой фрагмент SQL и нажмите «Выполнить» — в координатор отправится только выделенный текст.
+
 ---
 
 ## Архитектура и сетевые порты
 
-| Сервис | Хост в сети Docker | Внешний порт | Описание |
+Все контейнеры изолированы в отдельной сети `sql-demo-net` с префиксом `sql-demo-*`, что позволяет запускать стенд параллельно с другими сервисами (например, `hdfs-explorer`):
+
+| Сервис | Контейнер / Хост в Docker | Внешний порт | Описание |
 | :--- | :--- | :--- | :--- |
-| **SQL Explorer** | `sql-explorer` | `8000` | Web UI & REST API |
-| **Trino Coordinator** | `trino-coordinator` | `8080` | Trino HTTP / Kerberos API |
-| **HiveServer2** | `hive-server` | `10000` | Thrift HiveServer2 RPC |
-| **Hive Metastore** | `hive-metastore` | `9083` | Thrift Metastore RPC |
-| **PostgreSQL** | `postgres-meta` | `5432` | БД метаданных Hive Metastore |
-| **OpenLDAP** | `openldap` | `389` | Каталог пользователей и групп |
-| **MIT Kerberos KDC**| `kdc` | `88` | Аутентификация Kerberos / TGT |
+| **SQL Web Explorer** | `sql-demo-explorer` | `8002` | Web UI & REST API (внутри порт 8000) |
+| **Trino Coordinator** | `sql-demo-trino` | `8080` (HTTP), `8443` (HTTPS) | Trino API с Kerberos и доступом к Hive и TPCH |
+| **HiveServer2** | `sql-demo-hive-server` | `10000`, `10002` (Web) | Apache Hive 4.0.0 HS2 RPC с Kerberos и `doAs` |
+| **Hive Metastore** | `sql-demo-hive-metastore` | `9083` | Метастор таблиц Hive |
+| **PostgreSQL** | `sql-demo-postgres-meta` | `5432` | БД метаданных Hive Metastore |
+| **OpenLDAP** | `sql-demo-ldap` | `1389` | Каталог пользователей и ролевых групп |
+| **MIT Kerberos KDC** | `sql-demo-kdc` | `1088` | KDC Realm `COMPANY.LOCAL` |
+

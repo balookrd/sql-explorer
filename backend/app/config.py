@@ -104,9 +104,22 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             raw_data = yaml.safe_load(f) or {}
-            return AppConfig(**raw_data)
-    
-    # Дефолтная конфигурация если файла нет
-    return AppConfig()
+            cfg = AppConfig(**raw_data)
+    else:
+        cfg = AppConfig()
+
+    # Переопределение из переменных окружения (12-Factor App / Kubernetes Secrets)
+    if os.getenv("DATABASE_URL"):
+        cfg.database.url = os.environ["DATABASE_URL"]
+    if os.getenv("JWT_SECRET_KEY"):
+        cfg.auth.jwt.secret_key = os.environ["JWT_SECRET_KEY"]
+    if os.getenv("LDAP_BIND_PASSWORD"):
+        cfg.auth.ldap.bind_password = os.environ["LDAP_BIND_PASSWORD"]
+    if os.getenv("KRB5_KEYTAB"):
+        cfg.auth.kerberos.keytab_file = os.environ["KRB5_KEYTAB"]
+    if os.getenv("KRB5_PRINCIPAL"):
+        cfg.auth.kerberos.service_principal = os.environ["KRB5_PRINCIPAL"]
+
+    return cfg
 
 settings = load_config()

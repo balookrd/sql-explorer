@@ -1,6 +1,6 @@
-# SQL Explorer (Trino & Apache Hive / Hortonworks / Cloudera)
+# SQL Web Explorer (Trino & Apache Hive / Hortonworks / Cloudera)
 
-Современный корпоративный Web-интерфейс для выполнения SQL-запросов к распределенным движкам **Trino** и **Apache Hive (HiveServer2)** с поддержкой мультикластерности, аутентификации через **LDAPS** и **Kerberos SPNEGO SSO**, сквозной **имперсонации (impersonation / doAs)** и гибкой ролевой модели **ACL**.
+Современный корпоративный Web-интерфейс для выполнения SQL-запросов к распределенным аналитическим движкам **Trino** и **Apache Hive (HiveServer2)** с поддержкой мультикластерности, аутентификации через **LDAPS** и **Kerberos SPNEGO SSO**, сквозной **имперсонации (impersonation / doAs)**, гибкой ролевой модели **ACL** и деплоя в **Kubernetes (Helm)**.
 
 ---
 
@@ -14,15 +14,19 @@
 - **Сквозная имперсонация (Impersonation / Proxy User)**:
   - **Trino**: Выполнение запросов от имени реального пользователя через заголовок `X-Trino-User`.
   - **Hive (HiveServer2)**: Выполнение запросов с параметром `hive.server2.proxy.user` (doAs).
-  - Обеспечивает соблюдение политик безопасности **Apache Ranger** и **Trino System Access Control** на уровне хранилища данных.
-- **Современный Web-UI (Svelte 5 + TypeScript)**:
-  - **Monaco Editor** (движок VS Code) с диалектами SQL, подсветкой функций Trino/Hive, шорткатами `Cmd+Enter` / `Ctrl+Enter` и запуском выделенного фрагмента.
-  - **Дерево схемы данных (Schema Explorer)**: Интерактивный просмотр Каталогов -> Схем -> Таблиц -> Колонок и типов.
-  - **Стриминг результатов**: Server-Sent Events (SSE) в реальном времени с прогрессом и временем выполнения.
-  - **Отмена запросов**: Кнопка «Stop» немедленно посылает сигнал отмены в координатор Trino/Hive.
+  - Обеспечивает строгое соблюдение политик безопасности **Apache Ranger** и **Trino System Access Control** на уровне хранилища данных.
+- **Современный Web-UI (Svelte 5 + TypeScript + Tailwind CSS)**:
+  - **Monaco Editor** (движок VS Code) со светлой темой, диалектами SQL, подсветкой синтаксиса Trino/Hive, шорткатами `Cmd+Enter` / `Ctrl+Enter`.
+  - **Мульти-запросы**: Выполнение нескольких запросов на одной странице, запуск выделенного фрагмента текста или запроса под текущей позицией курсора.
+  - **Дерево схемы данных (Schema Explorer)**: Интерактивный просмотр Каталогов -> Схем -> Таблиц -> Колонок и типов данных.
+  - **Стриминг результатов**: Server-Sent Events (SSE) в реальном времени с отображением прогресса и таймингов.
+  - **Отмена запросов**: Кнопка «Stop» немедленно посылает сигнал отмены в координатор Trino/Hive и освобождает кластерные ресурсы.
   - **Виртуализированная таблица**: Фильтрация, пагинация, мгновенный экспорт в **CSV** и **JSON**.
-  - **История запросов и избранное**: Сохранение сниппетов и истории с метриками.
-- **Хранение истории**: Поддержка **SQLite** (из коробки) и **PostgreSQL**.
+  - **Фоновая очередь задач**: Запросы продолжают исполняться на сервере даже при закрытии вкладки; просмотр статусов и загрузка результатов из архива.
+  - **Desktop Notifications**: Браузерные уведомления при завершении длительных запросов.
+- **Готовность к Production и Kubernetes**:
+  - Готовый **Helm Chart** (`helm/sql-explorer`) для развертывания в Kubernetes с поддержкой Ingress, cert-manager, ConfigMap, Secrets и keytab.
+  - Поддержка **PostgreSQL** и **SQLite** (с PersistentVolumeClaim) для хранения истории и сохраненных запросов.
 
 ---
 
@@ -37,23 +41,37 @@ sql-explorer/
 │   │   ├── db/               # SQLAlchemy сессии (SQLite & PostgreSQL)
 │   │   ├── models/           # Модели данных: QueryHistory, SavedQuery
 │   │   ├── services/         # Движки: TrinoEngine, HiveEngine, MockEngine, QueryManager
-│   │   ├── config.py         # Загрузка и Pydantic-валидация config.yaml
-│   │   └── main.py           # FastAPI app + раздача SPA статики
+│   │   ├── config.py         # Загрузка конфигурации (YAML + 12-factor ENV vars)
+│   │   └── main.py           # FastAPI app + healthz + раздача SPA статики
 │   ├── tests/                # Интеграционные тесты API и ACL
+│   ├── docker-entrypoint.sh  # Инициализация Kerberos (kinit) и запуск
 │   └── requirements.txt      # Зависимости Python
 │
-├── frontend/                 # Svelte 5 SPA (Vite + TypeScript)
+├── frontend/                 # Svelte 5 SPA (Vite + TypeScript + Tailwind CSS)
 │   ├── src/
 │   │   ├── api/              # Клиент API и обработка SSE потоков
-│   │   ├── components/       # Header, Sidebar, SqlEditor, QueryToolbar, ResultsGrid, LoginModal
+│   │   ├── components/       # Header, Sidebar, SqlEditor, QueryToolbar, ResultsGrid, QueueView, LoginModal
+│   │   ├── utils/            # Парсер мульти-запросов (sqlSplitter.ts)
 │   │   ├── types.ts          # Модели TypeScript
 │   │   └── App.svelte        # Главный компонент (Svelte 5 Runes)
 │   └── package.json
 │
+├── helm/
+│   └── sql-explorer/         # Production Helm-чарт для Kubernetes
+│       ├── Chart.yaml        # Метаданные чарта
+│       ├── values.yaml       # Параметры развертывания по умолчанию
+│       ├── templates/        # Шаблоны Deployment, Service, Ingress, ConfigMap, Secret, PVC
+│       └── README.md         # Руководство по установке чарта
+│
+├── demo/                     # Автономный демонстрационный стенд (Docker Compose)
+│   ├── docker-compose.demo.yml # Trino, Hive, Metastore, OpenLDAP, MIT KDC, SQL Explorer
+│   ├── start-demo.sh         # Скрипт запуска стенда
+│   └── stop-demo.sh          # Скрипт остановки стенда
+│
 ├── config/
 │   └── config.yaml           # Конфигурация кластеров, LDAP, Kerberos и ACL
-├── Dockerfile                # Multi-stage Docker образ (Node -> Python)
-└── docker-compose.yml        # Docker Compose сценарий
+├── Dockerfile                # Multi-stage Docker образ (Node.js -> Python)
+└── docker-compose.yml        # Базовый Docker Compose сценарий
 ```
 
 ---
@@ -187,6 +205,51 @@ Frontend откроется на `http://localhost:5173` с автоматиче
 
 ---
 
+## Развертывание в Kubernetes (Helm)
+
+Для развертывания в Kubernetes подготовлен готовый Helm-чарт в директории `helm/sql-explorer`:
+
+```bash
+# Установка с базовыми параметрами
+helm install sql-explorer ./helm/sql-explorer -n analytics --create-namespace
+```
+
+### Установка с Kerberos Keytab и внешним PostgreSQL:
+```bash
+helm upgrade --install sql-explorer ./helm/sql-explorer \
+  -n analytics \
+  --set image.repository="registry.company.local/analytics/sql-explorer" \
+  --set image.tag="0.1.0" \
+  --set config.database.url="postgresql+asyncpg://sql_user:sql_pass@postgres.analytics.svc:5432/sql_explorer" \
+  --set secrets.jwtSecret="SuperSecretKey123" \
+  --set secrets.ldapBindPassword="ServiceAccountPassword" \
+  --set secrets.kerberosKeytabBase64="$(base64 -w 0 /path/to/sql-explorer.keytab)" \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host="sql-explorer.company.local"
+```
+
+Подробное руководство по параметрам чарта см. в [helm/sql-explorer/README.md](file:///Users/mvmalykh/IdeaProjects/sql-explorer/helm/sql-explorer/README.md).
+
+---
+
+## Автономный демонстрационный стенд (Docker Compose)
+
+В проект включен полностью настроенный керберизированный демо-стенд (`demo/`):
+- **MIT Kerberos KDC** (Realm `COMPANY.LOCAL`, keytabs для Trino, Hive и Web-интерфейса).
+- **OpenLDAP** (пользователи `analyst_user`, `de_user`, `admin_user`).
+- **Trino Coordinator** с Kerberos и каталогами `tpch` и `hive`.
+- **Hive Metastore** на PostgreSQL + **HiveServer2** с поддержкой `doAs`.
+- **SQL Web Explorer** на порту **8002**.
+
+Запуск одной командой:
+```bash
+./demo/start-demo.sh
+```
+Веб-интерфейс будет доступен по адресу: 👉 **[http://localhost:8002](http://localhost:8002)**.  
+Подробная инструкция со сценариями тестирования — в [DEMO.md](file:///Users/mvmalykh/IdeaProjects/sql-explorer/DEMO.md).
+
+---
+
 ## Запуск в Docker
 
 Сборка и запуск единого контейнера (Frontend + Backend):
@@ -195,6 +258,18 @@ docker build -t sql-explorer:latest .
 docker run -d -p 8000:8000 -v $(pwd)/config:/app/config sql-explorer:latest
 ```
 Интерфейс будет доступен в браузере: `http://localhost:8000`.
+
+---
+
+## Возможности редактора и выполнение запросов
+
+- **Мульти-запросы**: В редакторе можно писать цепочки SQL-запросов, разделяя их точкой с запятой `;`.
+- **Запуск выделенного фрагмента**: Если в Monaco Editor выделить часть текста и нажать `Cmd+Enter` (или кнопку «Выполнить»), исполнится только выделенный SQL.
+- **Запрос под курсором**: Если выделения нет, автоматически находится и исполняется запрос под текущей позицией курсора.
+- **Горячие клавиши**:
+  - `Cmd+Enter` / `Ctrl+Enter` — запустить запрос.
+  - `Cmd+S` / `Ctrl+S` — сохранить запрос в избранное.
+  - `Cmd+F` / `Ctrl+F` — поиск и замена в редакторе кода.
 
 ---
 

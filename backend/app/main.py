@@ -37,6 +37,7 @@ app.include_router(catalog.router, prefix="/api")
 app.include_router(queries.router, prefix="/api")
 
 @app.get("/api/health")
+@app.get("/healthz")
 async def health():
     return {
         "status": "healthy",
