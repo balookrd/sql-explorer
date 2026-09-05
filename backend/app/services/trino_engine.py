@@ -24,15 +24,18 @@ class TrinoExecutionEngine:
         elif auth_type == "kerberos":
             auth_handler = KerberosAuthentication(
                 service_name=auth_cfg.get("service_name", "trino"),
-                mutual_authentication=False
+                mutual_authentication=KerberosAuthentication.MUTUAL_DISABLED,
+                principal=auth_cfg.get("principal"),
+                config=auth_cfg.get("krb5_config")
             )
 
-        # Имперсонация: если включена, передаем реального пользователя через X-Trino-User
+        # Имперсонация: если включена, передаем имя реального пользователя в conn user
         http_headers = {}
         target_user = conn_user
         if self.cluster.impersonation.enabled:
             target_user = user_login
-            http_headers["X-Trino-User"] = user_login
+
+        verify_ssl = auth_cfg.get("verify_ssl", False if self.cluster.use_ssl else True)
 
         conn = trino.dbapi.connect(
             host=self.cluster.host,
@@ -42,7 +45,8 @@ class TrinoExecutionEngine:
             schema=self.cluster.schema_ or "default",
             http_scheme="https" if self.cluster.use_ssl else "http",
             auth=auth_handler,
-            http_headers=http_headers
+            http_headers=http_headers,
+            verify=verify_ssl
         )
         return conn
 

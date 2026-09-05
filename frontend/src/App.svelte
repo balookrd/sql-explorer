@@ -54,6 +54,7 @@
   );
 
   let editorHeightPercent = $state(45);
+  let runEditorTrigger: (() => void) | null = $state(null);
 
   onMount(async () => {
     // Запрос разрешения на браузерные системные уведомления
@@ -158,7 +159,8 @@
   }
 
   async function executeQuery(queryToRun: string) {
-    if (!activeTab || !selectedClusterId || activeTab.isRunning) return;
+    const cleanQuery = queryToRun.trim().replace(/;+$/, '').trim();
+    if (!activeTab || !selectedClusterId || activeTab.isRunning || !cleanQuery) return;
 
     activeTab.isRunning = true;
     activeTab.statusText = 'Постановка в очередь...';
@@ -178,7 +180,7 @@
     }, 100);
 
     try {
-      const resp = await api.executeQuery(selectedClusterId, queryToRun);
+      const resp = await api.executeQuery(selectedClusterId, cleanQuery);
       activeTab.queryId = resp.query_id;
       activeTab.statusText = resp.message;
       if (sidebarRef) sidebarRef.refreshQueue();
@@ -340,7 +342,13 @@
           statusText={activeTab.statusText}
           executionTimeMs={activeTab.executionTimeMs}
           rowsCount={activeTab.totalRows}
-          onRun={() => executeQuery(activeTab.query)}
+          onRun={() => {
+            if (runEditorTrigger) {
+              runEditorTrigger();
+            } else {
+              executeQuery(activeTab.query);
+            }
+          }}
           onCancel={cancelQuery}
           onSave={handleSaveQuery}
         />
@@ -349,6 +357,7 @@
           <SqlEditor
             bind:value={activeTab.query}
             onExecute={(q) => executeQuery(q)}
+            registerTrigger={(fn) => { runEditorTrigger = fn; }}
           />
         </div>
 

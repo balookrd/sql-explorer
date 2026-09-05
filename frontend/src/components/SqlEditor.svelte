@@ -1,17 +1,21 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import * as monaco from 'monaco-editor';
+  import { getStatementAtCursor, sanitizeSql } from '../utils/sqlSplitter';
 
   let {
     value = $bindable(),
-    onExecute
+    onExecute,
+    registerTrigger
   }: {
     value: string;
     onExecute: (queryToRun: string) => void;
+    registerTrigger?: (fn: () => void) => void;
   } = $props();
 
   let editorContainer: HTMLDivElement;
   let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
+  let currentDecorations: string[] = [];
 
   onMount(() => {
     // Регистрация кастомных ключевых слов Trino и Hive в синтаксисе SQL
@@ -74,18 +78,72 @@
     editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       triggerExecution();
     });
+
+    if (registerTrigger) {
+      registerTrigger(triggerExecution);
+    }
   });
 
   export function triggerExecution() {
     if (!editorInstance) return;
-    const selection = editorInstance.getSelection();
-    const selectedText = selection && !selection.isEmpty()
-      ? editorInstance.getModel()?.getValueInRange(selection)
-      : null;
+    const model = editorInstance.getModel();
+    if (!model) return;
 
-    const queryToRun = selectedText?.trim() || editorInstance.getValue().trim();
-    if (queryToRun) {
-      onExecute(queryToRun);
+    // 1. Приоритет: явное выделение пользователем
+    const selection = editorInstance.getSelection();
+    if (selection && !selection.isEmpty()) {
+      const selectedText = model.getValueInRange(selection);
+      const clean = sanitizeSql(selectedText);
+      if (clean) {
+        onExecute(clean);
+        return;
+      }
+    }
+
+    // 2. Определение запроса под курсором (Statement at Cursor)
+    const position = editorInstance.getPosition();
+    const fullText = model.getValue();
+    const cursorOffset = position ? model.getOffsetAt(position) : 0;
+
+    const targetStatement = getStatementAtCursor(fullText, cursorOffset);
+    if (targetStatement) {
+      const clean = sanitizeSql(targetStatement.text);
+      if (clean) {
+        // Визуальная подсветка выполняемого запроса в Monaco
+        const startPos = model.getPositionAt(targetStatement.startOffset);
+        const endPos = model.getPositionAt(targetStatement.endOffset);
+        const highlightRange = new monaco.Range(
+          startPos.lineNumber,
+          startPos.column,
+          endPos.lineNumber,
+          endPos.column
+        );
+
+        currentDecorations = editorInstance.deltaDecorations(currentDecorations, [
+          {
+            range: highlightRange,
+            options: {
+              className: 'executing-query-highlight',
+              isWholeLine: false
+            }
+          }
+        ]);
+
+        setTimeout(() => {
+          if (editorInstance) {
+            currentDecorations = editorInstance.deltaDecorations(currentDecorations, []);
+          }
+        }, 700);
+
+        onExecute(clean);
+        return;
+      }
+    }
+
+    // 3. Fallback: весь текст редактора
+    const fallback = sanitizeSql(fullText);
+    if (fallback) {
+      onExecute(fallback);
     }
   }
 
@@ -106,3 +164,12 @@
 <div class="h-full w-full relative overflow-hidden flex flex-col bg-[#1e1e1e]">
   <div bind:this={editorContainer} class="flex-1 w-full h-full"></div>
 </div>
+
+<style>
+  :global(.executing-query-highlight) {
+    background-color: rgba(14, 165, 233, 0.22) !important;
+    border-left: 2px solid #38bdf8 !important;
+    border-radius: 2px;
+  }
+</style>
+

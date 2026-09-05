@@ -90,8 +90,10 @@ class QueryManager:
     def _sanitize_and_limit_query(self, query: str) -> str:
         trimmed = query.strip().rstrip(";")
         if settings.query_defaults.auto_add_limit:
-            if not re.search(r"\blimit\s+\d+\b", trimmed, re.IGNORECASE):
-                trimmed = f"{trimmed}\nLIMIT {settings.query_defaults.default_limit}"
+            # Добавляем LIMIT только к операторам выборки данных (SELECT / WITH)
+            if re.match(r"^\s*(select|with)\b", trimmed, re.IGNORECASE):
+                if not re.search(r"\blimit\s+\d+\b", trimmed, re.IGNORECASE):
+                    trimmed = f"{trimmed}\nLIMIT {settings.query_defaults.default_limit}"
         return trimmed
 
     def _get_result_path(self, query_id: str) -> str:

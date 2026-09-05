@@ -16,12 +16,8 @@ class HiveExecutionEngine:
         if auth_mech == "KERBEROS":
             auth_mech = "GSSAPI"
 
-        # Параметры doAs / proxy user для имперсонации
-        config_params = {}
-        if self.cluster.impersonation.enabled:
-            config_params["hive.server2.proxy.user"] = user_login
-
-        user = auth_cfg.get("user", user_login)
+        # Имя пользователя для сессии (при включенной имперсонации doAs передается реальный пользователь)
+        effective_user = user_login if self.cluster.impersonation.enabled else auth_cfg.get("user", user_login)
         password = auth_cfg.get("password", "")
         kerberos_service_name = auth_cfg.get("kerberos_service_name", "hive")
 
@@ -29,12 +25,11 @@ class HiveExecutionEngine:
             host=self.cluster.host,
             port=self.cluster.port,
             auth_mechanism=auth_mech,
-            user=user,
+            user=effective_user,
             password=password,
             kerberos_service_name=kerberos_service_name,
             use_ssl=self.cluster.use_ssl,
-            database=self.cluster.schema_ or "default",
-            configuration=config_params
+            database=self.cluster.schema_ or "default"
         )
         return conn
 

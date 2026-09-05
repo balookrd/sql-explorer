@@ -40,9 +40,12 @@ COPY pytest.ini ./
 # Копирование собранного Frontend из этапа 1
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
+# Делаем скрипт запуска исполняемым
+RUN chmod +x /app/backend/docker-entrypoint.sh
+
 ENV CONFIG_PATH=/app/config/config.yaml \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["python", "-m", "backend.app.main"]
+ENTRYPOINT ["/app/backend/docker-entrypoint.sh"]

@@ -27,7 +27,7 @@
       <button
         onclick={onRun}
         class="flex items-center gap-1.5 px-3 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs shadow-sm transition cursor-pointer"
-        title="Выполнить запрос (Cmd+Enter / Ctrl+Enter)"
+        title="Выполнить текущий или выделенный запрос (Cmd+Enter / Ctrl+Enter)"
       >
         <Play class="w-3.5 h-3.5 fill-current" />
         <span>Выполнить</span>
