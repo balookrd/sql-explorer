@@ -54,7 +54,7 @@
     editorInstance = monaco.editor.create(editorContainer, {
       value: value,
       language: 'sql',
-      theme: 'vs-dark',
+      theme: 'vs',
       automaticLayout: true,
       fontSize: 13,
       fontFamily: "'JetBrains Mono', 'Fira Code', Menlo, Monaco, 'Courier New', monospace",
@@ -161,14 +161,14 @@
   });
 </script>
 
-<div class="h-full w-full relative overflow-hidden flex flex-col bg-[#1e1e1e]">
+<div class="h-full w-full relative overflow-hidden flex flex-col bg-white">
   <div bind:this={editorContainer} class="flex-1 w-full h-full"></div>
 </div>
 
 <style>
   :global(.executing-query-highlight) {
-    background-color: rgba(14, 165, 233, 0.22) !important;
-    border-left: 2px solid #38bdf8 !important;
+    background-color: rgba(2, 132, 199, 0.12) !important;
+    border-left: 3px solid #0284c7 !important;
     border-radius: 2px;
   }
 </style>

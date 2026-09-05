@@ -140,12 +140,12 @@
   });
 </script>
 
-<aside class="w-80 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 select-none overflow-hidden h-full">
+<aside class="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 select-none overflow-hidden h-full">
   <!-- Вкладки сайдбара -->
-  <div class="flex border-b border-slate-800 bg-slate-950/50 p-1 gap-1 shrink-0">
+  <div class="flex border-b border-slate-200 bg-slate-50 p-1.5 gap-1 shrink-0">
     <button
       onclick={() => handleTabChange('schema')}
-      class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded transition cursor-pointer {activeTab === 'schema' ? 'bg-slate-800 text-sky-400 font-semibold shadow-sm' : 'text-slate-400 hover:text-slate-200'}"
+      class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded-md transition cursor-pointer {activeTab === 'schema' ? 'bg-white text-sky-700 font-semibold shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}"
     >
       <Database class="w-3.5 h-3.5" />
       <span>Схема</span>
@@ -153,7 +153,7 @@
 
     <button
       onclick={() => handleTabChange('queue')}
-      class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded transition cursor-pointer {activeTab === 'queue' ? 'bg-slate-800 text-sky-400 font-semibold shadow-sm' : 'text-slate-400 hover:text-slate-200'}"
+      class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded-md transition cursor-pointer {activeTab === 'queue' ? 'bg-white text-sky-700 font-semibold shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}"
     >
       <ListOrdered class="w-3.5 h-3.5" />
       <span>Очередь</span>
@@ -161,7 +161,7 @@
 
     <button
       onclick={() => handleTabChange('history')}
-      class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded transition cursor-pointer {activeTab === 'history' ? 'bg-slate-800 text-sky-400 font-semibold shadow-sm' : 'text-slate-400 hover:text-slate-200'}"
+      class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded-md transition cursor-pointer {activeTab === 'history' ? 'bg-white text-sky-700 font-semibold shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}"
     >
       <History class="w-3.5 h-3.5" />
       <span>История</span>
@@ -170,14 +170,14 @@
 
   {#if activeTab === 'schema'}
     <!-- Поиск и фильтр схемы -->
-    <div class="p-2 border-b border-slate-800 flex flex-col gap-2 shrink-0">
+    <div class="p-2.5 border-b border-slate-200 bg-slate-50/50 flex flex-col gap-2 shrink-0">
       {#if catalogs.length > 1}
-        <div class="flex items-center gap-1.5 text-xs text-slate-400">
-          <span>Каталог:</span>
+        <div class="flex items-center gap-1.5 text-xs text-slate-500">
+          <span class="font-medium">Каталог:</span>
           <select
             bind:value={selectedCatalog}
             onchange={() => loadSchemas(selectedCatalog)}
-            class="flex-1 bg-slate-800 text-slate-200 text-xs rounded px-2 py-1 outline-none border border-slate-700"
+            class="flex-1 bg-white text-slate-800 text-xs rounded-md px-2 py-1 outline-none border border-slate-300 focus:border-sky-500"
           >
             {#each catalogs as cat}
               <option value={cat}>{cat}</option>
@@ -187,12 +187,12 @@
       {/if}
 
       <div class="relative">
-        <Search class="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+        <Search class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
         <input
           type="text"
           bind:value={searchQuery}
           placeholder="Поиск таблиц..."
-          class="w-full bg-slate-950/80 border border-slate-800 text-xs rounded-md pl-8 pr-2.5 py-1.5 text-slate-200 placeholder-slate-500 outline-none focus:border-sky-500 transition"
+          class="w-full bg-white border border-slate-300 text-xs rounded-md pl-8 pr-2.5 py-1.5 text-slate-800 placeholder-slate-400 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
         />
       </div>
     </div>
@@ -200,7 +200,7 @@
     <!-- Дерево объектов схемы -->
     <div class="flex-1 overflow-y-auto p-2 text-xs">
       {#if loadingSchema}
-        <div class="flex items-center justify-center py-8 text-slate-500 gap-2">
+        <div class="flex items-center justify-center py-8 text-slate-400 gap-2">
           <RefreshCw class="w-4 h-4 animate-spin" />
           <span>Загрузка схемы...</span>
         </div>
@@ -209,51 +209,51 @@
           <div class="mb-1">
             <button
               onclick={() => toggleSchema(sch)}
-              class="w-full flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-slate-800 text-slate-300 font-medium text-left transition cursor-pointer"
+              class="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 font-medium text-left transition cursor-pointer"
             >
               {#if expandedSchemas[sch]}
-                <ChevronDown class="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <ChevronDown class="w-3.5 h-3.5 text-slate-400 shrink-0" />
               {:else}
-                <ChevronRight class="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <ChevronRight class="w-3.5 h-3.5 text-slate-400 shrink-0" />
               {/if}
-              <Folder class="w-3.5 h-3.5 text-amber-500/80 shrink-0" />
+              <Folder class="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <span class="truncate">{sch}</span>
             </button>
 
             {#if expandedSchemas[sch]}
-              <div class="pl-4 mt-0.5 space-y-0.5 border-l border-slate-800/80 ml-2">
+              <div class="pl-4 mt-0.5 space-y-0.5 border-l border-slate-200 ml-2.5">
                 {#if tablesBySchema[sch]}
                   {#each (tablesBySchema[sch] || []).filter(t => !searchQuery || t.toLowerCase().includes(searchQuery.toLowerCase())) as tbl}
                     <div>
-                      <div class="flex items-center justify-between group rounded hover:bg-slate-800/80 px-1.5 py-1">
+                      <div class="flex items-center justify-between group rounded-md hover:bg-sky-50/70 px-1.5 py-1 transition">
                         <button
                           onclick={() => toggleTable(sch, tbl)}
-                          class="flex items-center gap-1.5 text-slate-400 group-hover:text-slate-200 text-left truncate flex-1 cursor-pointer"
+                          class="flex items-center gap-1.5 text-slate-600 group-hover:text-slate-900 text-left truncate flex-1 cursor-pointer"
                         >
                           {#if expandedTables[`${sch}.${tbl}`]}
-                            <ChevronDown class="w-3 h-3 text-slate-500 shrink-0" />
+                            <ChevronDown class="w-3 h-3 text-slate-400 shrink-0" />
                           {:else}
-                            <ChevronRight class="w-3 h-3 text-slate-500 shrink-0" />
+                            <ChevronRight class="w-3 h-3 text-slate-400 shrink-0" />
                           {/if}
-                          <Table class="w-3.5 h-3.5 text-sky-400/80 shrink-0" />
+                          <Table class="w-3.5 h-3.5 text-sky-600 shrink-0" />
                           <span class="truncate">{tbl}</span>
                         </button>
 
                         <button
                           onclick={() => onSelectTable(`${selectedCatalog}.${sch}.${tbl}`)}
                           title="Вставить SELECT в редактор"
-                          class="opacity-0 group-hover:opacity-100 p-1 hover:bg-sky-500/20 text-sky-400 rounded transition cursor-pointer"
+                          class="opacity-0 group-hover:opacity-100 p-1 hover:bg-sky-100 text-sky-600 rounded transition cursor-pointer"
                         >
-                          <Play class="w-2.5 h-2.5" />
+                          <Play class="w-2.5 h-2.5 fill-current" />
                         </button>
                       </div>
 
                       {#if expandedTables[`${sch}.${tbl}`] && columnsByTable[`${sch}.${tbl}`]}
-                        <div class="pl-4 py-1 space-y-1 border-l border-slate-800/80 ml-2">
+                        <div class="pl-4 py-1 space-y-1 border-l border-slate-200 ml-2">
                           {#each columnsByTable[`${sch}.${tbl}`] as col}
-                            <div class="flex items-center justify-between text-[11px] text-slate-400 pr-2">
-                              <span class="truncate text-slate-300 font-mono">{col.name}</span>
-                              <span class="text-[10px] text-slate-500 font-mono shrink-0 ml-1">{col.type}</span>
+                            <div class="flex items-center justify-between text-[11px] text-slate-600 pr-2">
+                              <span class="truncate text-slate-700 font-mono">{col.name}</span>
+                              <span class="text-[10px] text-slate-400 font-mono shrink-0 ml-1">{col.type}</span>
                             </div>
                           {/each}
                         </div>
@@ -261,7 +261,7 @@
                     </div>
                   {/each}
                 {:else}
-                  <div class="text-[11px] text-slate-500 py-1 pl-2">Загрузка таблиц...</div>
+                  <div class="text-[11px] text-slate-400 py-1 pl-2">Загрузка таблиц...</div>
                 {/if}
               </div>
             {/if}
@@ -272,7 +272,7 @@
 
   {:else if activeTab === 'queue'}
     <!-- Вкладка Очередь задач -->
-    <div class="flex-1 overflow-hidden">
+    <div class="flex-1 overflow-hidden bg-white">
       <QueueView
         bind:this={queueViewRef}
         onLoadResult={onLoadCachedResult}
@@ -282,12 +282,12 @@
 
   {:else}
     <!-- Вкладка История запросов -->
-    <div class="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
-      <div class="flex items-center justify-between pb-1 mb-1 border-b border-slate-800 text-[11px] text-slate-400 px-1">
+    <div class="flex-1 overflow-y-auto p-2.5 space-y-2 text-xs">
+      <div class="flex items-center justify-between pb-1.5 mb-1 border-b border-slate-200 text-[11px] text-slate-500 px-1 font-medium">
         <span>История выполненных запросов</span>
         <button
           onclick={refreshHistory}
-          class="hover:text-sky-400 transition cursor-pointer p-0.5"
+          class="hover:text-sky-600 transition cursor-pointer p-0.5"
           title="Обновить"
         >
           <RefreshCw class="w-3 h-3 {loadingHistory ? 'animate-spin' : ''}" />
@@ -295,40 +295,40 @@
       </div>
 
       {#if historyItems.length === 0}
-        <div class="text-center py-8 text-slate-500">История запросов пуста</div>
+        <div class="text-center py-8 text-slate-400">История запросов пуста</div>
       {:else}
         {#each historyItems as item}
           <div
-            class="p-2 rounded-lg bg-slate-950/60 hover:bg-slate-800 border border-slate-800/80 transition flex flex-col gap-1 group"
+            class="p-2.5 rounded-lg bg-slate-50 hover:bg-sky-50/50 border border-slate-200 shadow-2xs transition flex flex-col gap-1.5 group"
           >
             <div class="flex items-center justify-between text-[10px]">
-              <span class="font-semibold text-slate-300 truncate">{item.cluster_name}</span>
+              <span class="font-bold text-slate-800 truncate">{item.cluster_name}</span>
               {#if item.status === 'FINISHED'}
-                <span class="flex items-center gap-1 text-emerald-400 font-medium">
+                <span class="flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-medium">
                   <CheckCircle2 class="w-2.5 h-2.5" />
                   {item.rows_count} стр.
                 </span>
               {:else if item.status === 'CANCELLED'}
-                <span class="text-slate-400 font-medium">Остановлен</span>
+                <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">Остановлен</span>
               {:else if item.status === 'FAILED'}
-                <span class="flex items-center gap-1 text-red-400 font-medium">
+                <span class="flex items-center gap-1 text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded font-medium">
                   <XCircle class="w-2.5 h-2.5" />
                   Ошибка
                 </span>
               {:else}
-                <span class="text-sky-400 font-medium">{item.status}</span>
+                <span class="text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium">{item.status}</span>
               {/if}
             </div>
 
             <div
               onclick={() => onSelectHistoryQuery(item.query_text)}
               title="Вставить SQL в редактор"
-              class="font-mono text-[11px] text-slate-400 group-hover:text-slate-200 line-clamp-2 break-all cursor-pointer"
+              class="font-mono text-[11px] text-slate-700 group-hover:text-slate-900 bg-white border border-slate-200/80 rounded p-1.5 line-clamp-2 break-all cursor-pointer transition"
             >
               {item.query_text}
             </div>
 
-            <div class="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-900">
+            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-200">
               <span class="flex items-center gap-1">
                 <Clock class="w-2.5 h-2.5" />
                 {Math.round(item.execution_time_ms)} мс
@@ -337,7 +337,7 @@
               {#if item.has_cached_result}
                 <button
                   onclick={() => onLoadCachedResult(item.id, item.cluster_name)}
-                  class="text-sky-400 hover:text-sky-300 font-medium cursor-pointer"
+                  class="text-sky-600 hover:text-sky-700 font-semibold cursor-pointer"
                 >
                   Смотреть данные →
                 </button>

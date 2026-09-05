@@ -291,7 +291,7 @@
   }
 </script>
 
-<div class="h-screen w-screen flex flex-col bg-[#0b0f19] text-slate-100 font-sans overflow-hidden">
+<div class="h-screen w-screen flex flex-col bg-slate-50 text-slate-800 font-sans overflow-hidden">
   <Header
     {user}
     {clusters}
@@ -308,19 +308,19 @@
       onLoadCachedResult={handleLoadCachedResult}
     />
 
-    <main class="flex-1 flex flex-col overflow-hidden bg-slate-950">
+    <main class="flex-1 flex flex-col overflow-hidden bg-slate-50">
       <!-- Вкладки запросов -->
-      <div class="h-9 bg-slate-900/90 border-b border-slate-800 flex items-center px-2 gap-1 overflow-x-auto select-none shrink-0">
+      <div class="h-10 bg-slate-100/80 border-b border-slate-200 flex items-center px-2.5 gap-1 overflow-x-auto select-none shrink-0">
         {#each tabs as tab}
           <div
             onclick={() => (activeTabId = tab.id)}
-            class="group flex items-center gap-2 px-3 py-1 text-xs rounded-t transition cursor-pointer border-t-2 {activeTabId === tab.id ? 'bg-slate-950 border-sky-400 text-sky-400 font-medium' : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'}"
+            class="group flex items-center gap-2 px-3 py-1.5 text-xs rounded-t-lg transition cursor-pointer border-t-2 {activeTabId === tab.id ? 'bg-white border-sky-600 text-sky-700 font-semibold shadow-xs' : 'border-transparent text-slate-600 hover:bg-slate-200/60 hover:text-slate-900'}"
           >
-            <Terminal class="w-3 h-3" />
+            <Terminal class="w-3.5 h-3.5 text-slate-400 {activeTabId === tab.id ? 'text-sky-600' : ''}" />
             <span>{tab.title}</span>
             <button
               onclick={(e) => closeTab(tab.id, e)}
-              class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition"
+              class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
             >
               <X class="w-3 h-3" />
             </button>
@@ -329,10 +329,10 @@
 
         <button
           onclick={createTab}
-          class="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-sky-400 transition cursor-pointer ml-1"
+          class="p-1 rounded-md hover:bg-slate-200 text-slate-500 hover:text-sky-600 transition cursor-pointer ml-1"
           title="Новая вкладка"
         >
-          <Plus class="w-3.5 h-3.5" />
+          <Plus class="w-4 h-4" />
         </button>
       </div>
 
@@ -353,7 +353,7 @@
           onSave={handleSaveQuery}
         />
 
-        <div style="height: {editorHeightPercent}%" class="w-full shrink-0 border-b border-slate-800 overflow-hidden">
+        <div style="height: {editorHeightPercent}%" class="w-full shrink-0 border-b border-slate-200 overflow-hidden bg-white">
           <SqlEditor
             bind:value={activeTab.query}
             onExecute={(q) => executeQuery(q)}

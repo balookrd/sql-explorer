@@ -65,58 +65,58 @@
   });
 </script>
 
-<div class="h-full flex flex-col select-none overflow-hidden">
+<div class="h-full flex flex-col select-none overflow-hidden bg-white">
   <!-- Верхняя строка управления очередью -->
-  <div class="p-2 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
-    <div class="flex items-center gap-1.5 text-xs text-slate-300 font-medium">
-      <ListOrdered class="w-3.5 h-3.5 text-sky-400" />
+  <div class="p-2.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70 shrink-0">
+    <div class="flex items-center gap-1.5 text-xs text-slate-700 font-semibold">
+      <ListOrdered class="w-3.5 h-3.5 text-sky-600" />
       <span>Очередь задач ({queueItems.filter((i) => i.status === 'RUNNING' || i.status === 'QUEUED').length} активных)</span>
     </div>
 
     <button
       onclick={refreshQueue}
-      class="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+      class="p-1 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer"
       title="Обновить очередь"
     >
-      <RefreshCw class="w-3 h-3 {loading ? 'animate-spin' : ''}" />
+      <RefreshCw class="w-3.5 h-3.5 {loading ? 'animate-spin' : ''}" />
     </button>
   </div>
 
   <!-- Список задач -->
-  <div class="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
+  <div class="flex-1 overflow-y-auto p-2.5 space-y-2 text-xs">
     {#if queueItems.length === 0}
-      <div class="text-center py-10 text-slate-500">
+      <div class="text-center py-10 text-slate-400">
         В очереди нет задач.<br />
-        <span class="text-[11px] text-slate-600">Все запущенные запросы сохраняются здесь</span>
+        <span class="text-[11px] text-slate-400">Все запущенные запросы сохраняются здесь</span>
       </div>
     {:else}
       {#each queueItems as item}
         <div
-          class="p-2.5 rounded-lg bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800/80 transition flex flex-col gap-1.5 group"
+          class="p-2.5 rounded-lg bg-slate-50 hover:bg-sky-50/50 border border-slate-200 shadow-2xs transition flex flex-col gap-1.5 group"
         >
           <!-- Статус и кластер -->
           <div class="flex items-center justify-between">
-            <span class="font-semibold text-slate-200 text-[11px] truncate">{item.cluster_name}</span>
+            <span class="font-bold text-slate-800 text-[11px] truncate">{item.cluster_name}</span>
 
             <div class="flex items-center gap-1.5">
               {#if item.status === 'QUEUED'}
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-950/50 text-amber-400 border border-amber-800/40 flex items-center gap-1">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
                   <Clock class="w-2.5 h-2.5" /> В очереди
                 </span>
               {:else if item.status === 'RUNNING'}
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-950/50 text-sky-400 border border-sky-800/40 flex items-center gap-1 animate-pulse">
-                  <div class="w-1.5 h-1.5 rounded-full bg-sky-400"></div> Исполняется...
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200 flex items-center gap-1 animate-pulse">
+                  <div class="w-1.5 h-1.5 rounded-full bg-sky-500"></div> Исполняется...
                 </span>
               {:else if item.status === 'FINISHED'}
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-950/50 text-emerald-400 border border-emerald-800/40 flex items-center gap-1">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
                   <CheckCircle2 class="w-2.5 h-2.5" /> Завершен
                 </span>
               {:else if item.status === 'CANCELLED'}
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
                   Остановлен
                 </span>
               {:else}
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-950/50 text-red-400 border border-red-800/40 flex items-center gap-1">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 border border-red-200 flex items-center gap-1">
                   <XCircle class="w-2.5 h-2.5" /> Ошибка
                 </span>
               {/if}
@@ -127,16 +127,16 @@
           <div
             onclick={() => onInsertQuery(item.query_text)}
             title="Кликните, чтобы вставить SQL в редактор"
-            class="font-mono text-[11px] text-slate-400 hover:text-sky-300 transition cursor-pointer line-clamp-2 break-all bg-slate-900/60 p-1 rounded border border-slate-900"
+            class="font-mono text-[11px] text-slate-700 hover:text-sky-700 transition cursor-pointer line-clamp-2 break-all bg-white p-1.5 rounded-md border border-slate-200"
           >
             {item.query_text}
           </div>
 
           <!-- Метрики и кнопки действий -->
-          <div class="flex items-center justify-between pt-1 border-t border-slate-900 text-[10px] text-slate-400">
+          <div class="flex items-center justify-between pt-1 border-t border-slate-200 text-[10px] text-slate-500">
             <div class="flex items-center gap-2">
               {#if item.status === 'FINISHED'}
-                <span class="flex items-center gap-0.5 text-emerald-400">
+                <span class="flex items-center gap-0.5 text-emerald-700 font-medium">
                   <Layers class="w-2.5 h-2.5" /> {item.rows_count.toLocaleString()} стр.
                 </span>
               {/if}
@@ -149,7 +149,7 @@
               {#if item.has_cached_result}
                 <button
                   onclick={() => onLoadResult(item.id, item.cluster_name)}
-                  class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-950/60 hover:bg-sky-900/80 border border-sky-800/50 text-sky-300 font-medium transition cursor-pointer"
+                  class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-semibold transition cursor-pointer shadow-2xs"
                   title="Загрузить сохраненный результат в таблицу"
                 >
                   <Eye class="w-3 h-3" />
@@ -161,13 +161,13 @@
               <button
                 onclick={() => handleDelete(item)}
                 disabled={actionLoading[item.id]}
-                class="flex items-center gap-1 p-1 rounded hover:bg-red-950/60 text-slate-500 hover:text-red-400 transition cursor-pointer disabled:opacity-50"
+                class="flex items-center gap-1 p-1 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-600 transition cursor-pointer disabled:opacity-50"
                 title={item.status === 'RUNNING' || item.status === 'QUEUED' ? 'Остановить выполнение и удалить из очереди' : 'Удалить из очереди'}
               >
                 {#if item.status === 'RUNNING' || item.status === 'QUEUED'}
-                  <Square class="w-3 h-3 text-red-400 fill-current" />
+                  <Square class="w-3 h-3 text-red-600 fill-current" />
                 {:else}
-                  <Trash2 class="w-3 h-3" />
+                  <Trash2 class="w-3.5 h-3.5" />
                 {/if}
               </button>
             </div>
