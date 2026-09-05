@@ -1,0 +1,112 @@
+from __future__ import annotations
+import os
+import yaml
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
+
+class MockUser(BaseModel):
+    username: str
+    password: str
+    display_name: str
+    email: str
+    groups: List[str] = []
+
+class LDAPConfig(BaseModel):
+    enabled: bool = True
+    server_uri: str = "ldaps://ad.company.local:636"
+    use_ssl: bool = True
+    bind_dn: str = ""
+    bind_password: str = ""
+    user_base_dn: str = ""
+    user_filter: str = "(&(objectClass=user)(sAMAccountName={username}))"
+    user_display_name_attr: str = "displayName"
+    user_email_attr: str = "mail"
+    group_base_dn: str = ""
+    group_filter: str = "(&(objectClass=group)(member={user_dn}))"
+    group_name_attr: str = "cn"
+    ca_cert_file: Optional[str] = None
+
+class KerberosConfig(BaseModel):
+    enabled: bool = True
+    keytab_file: Optional[str] = None
+    service_principal: Optional[str] = None
+
+class JWTConfig(BaseModel):
+    secret_key: str = "secret-key-for-dev-only"
+    algorithm: str = "HS256"
+    expire_minutes: int = 480
+
+class AuthConfig(BaseModel):
+    mode: str = "mock"  # hybrid, ldaps_only, kerberos_only, mock
+    mock_users: List[MockUser] = []
+    ldap: LDAPConfig = Field(default_factory=LDAPConfig)
+    kerberos: KerberosConfig = Field(default_factory=KerberosConfig)
+    jwt: JWTConfig = Field(default_factory=JWTConfig)
+
+class ClusterAclConfig(BaseModel):
+    allowed_groups: List[str] = ["*"]
+    allowed_users: List[str] = []
+
+class ImpersonationConfig(BaseModel):
+    enabled: bool = True
+    method: str = "x-trino-user"  # x-trino-user, doAs
+
+class ClusterConfig(BaseModel):
+    id: str
+    name: str
+    type: str  # trino, hive, mock
+    host: str = "localhost"
+    port: int = 8443
+    use_ssl: bool = False
+    catalog: Optional[str] = None
+    schema_: Optional[str] = Field(default=None, alias="schema")
+    auth: Dict[str, Any] = Field(default_factory=dict)
+    impersonation: ImpersonationConfig = Field(default_factory=ImpersonationConfig)
+    acl: ClusterAclConfig = Field(default_factory=ClusterAclConfig)
+
+    class Config:
+        populate_by_name = True
+
+class UIAclConfig(BaseModel):
+    allowed_users: List[str] = ["*"]
+    allowed_groups: List[str] = ["*"]
+    admin_groups: List[str] = []
+
+class ACLConfig(BaseModel):
+    ui_access: UIAclConfig = Field(default_factory=UIAclConfig)
+
+class QueryDefaultsConfig(BaseModel):
+    max_rows_in_ui: int = 10000
+    default_limit: int = 1000
+    auto_add_limit: bool = True
+    query_timeout_seconds: int = 600
+
+class ServerConfig(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 8000
+    debug: bool = False
+
+class DatabaseConfig(BaseModel):
+    url: str = "sqlite+aiosqlite:///./sql_explorer.db"
+
+class AppConfig(BaseModel):
+    server: ServerConfig = Field(default_factory=ServerConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    acl: ACLConfig = Field(default_factory=ACLConfig)
+    clusters: List[ClusterConfig] = Field(default_factory=list)
+    query_defaults: QueryDefaultsConfig = Field(default_factory=QueryDefaultsConfig)
+
+def load_config(config_path: Optional[str] = None) -> AppConfig:
+    if not config_path:
+        config_path = os.getenv("CONFIG_PATH", "config/config.yaml")
+    
+    if os.path.exists(config_path):
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw_data = yaml.safe_load(f) or {}
+            return AppConfig(**raw_data)
+    
+    # Дефолтная конфигурация если файла нет
+    return AppConfig()
+
+settings = load_config()

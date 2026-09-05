@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  sql-explorer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sql-explorer
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      # При необходимости пробросить krb5.conf и keytab:
+      # - /etc/krb5.conf:/etc/krb5.conf:ro
+      # - /etc/security/keytabs:/etc/security/keytabs:ro
+    # depends_on:
+    #   - postgres
+
+  # Опциональная база данных PostgreSQL для истории запросов (если не используется SQLite)
+  postgres:
+    image: postgres:16-alpine
+    container_name: sql-explorer-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sql_explorer
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: sql_explorer
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    profiles:
+      - full
+
+volumes:
+  pgdata:
