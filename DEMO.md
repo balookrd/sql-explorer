@@ -21,7 +21,7 @@ docker compose -f demo/docker-compose.demo.yml up -d --build
 ```
 
 После запуска откройте веб-интерфейс:
-👉 **[http://localhost:8000](http://localhost:8000)**
+👉 **[http://localhost:8002](http://localhost:8002)**
 
 ### Остановка стенда
 ```bash

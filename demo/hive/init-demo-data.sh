@@ -5,7 +5,7 @@ echo "Ожидание готовности HiveServer2 на порту 10000...
 MAX_TRIES=30
 COUNT=0
 
-until docker exec demo-sql-explorer python -c "import socket; s = socket.socket(); s.settimeout(2); s.connect(('hive-server', 10000))" >/dev/null 2>&1 || [ $COUNT -ge $MAX_TRIES ]; do
+until docker exec sql-demo-explorer python -c "import socket; s = socket.socket(); s.settimeout(2); s.connect(('hive-server', 10000))" >/dev/null 2>&1 || [ $COUNT -ge $MAX_TRIES ]; do
     COUNT=$((COUNT + 1))
     echo "Ожидание HiveServer2 ($COUNT/$MAX_TRIES)..."
     sleep 3
@@ -18,7 +18,7 @@ fi
 
 echo "Инициализация демонстрационных таблиц в Hive через Kerberos..."
 
-docker exec demo-sql-explorer python -c "
+docker exec sql-demo-explorer python -c "
 from impala.dbapi import connect
 try:
     c = connect(host='hive-server', port=10000, auth_mechanism='GSSAPI', kerberos_service_name='hive')
@@ -42,7 +42,7 @@ except Exception as e:
     print('Инициализация таблиц Hive:', e)
 " || true
 
-docker exec demo-hive-server bash -c '
+docker exec sql-demo-hive-server bash -c '
 mkdir -p /opt/hive/warehouse/demo_db.db/sales
 cat <<EOF > /opt/hive/warehouse/demo_db.db/sales/sales.csv
 1,ThinkPad X1 Carbon,1850.00,Laptops,2026-09-01

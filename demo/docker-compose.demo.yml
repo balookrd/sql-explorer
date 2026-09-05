@@ -1,12 +1,12 @@
 networks:
-  demo-net:
+  sql-demo-net:
     driver: bridge
 
 volumes:
-  krb5-data:
-  pgdata-meta:
-  ldap-data:
-  explorer-data:
+  sql-krb5-data:
+  sql-pgdata-meta:
+  sql-ldap-data:
+  sql-explorer-data:
 
 services:
   # ==========================================
@@ -16,16 +16,16 @@ services:
     build:
       context: ./kdc
       dockerfile: Dockerfile
-    container_name: demo-kdc
+    container_name: sql-demo-kdc
     hostname: kdc
     restart: unless-stopped
     ports:
-      - "88:88"
-      - "88:88/udp"
+      - "1088:88"
+      - "1088:88/udp"
     volumes:
-      - krb5-data:/var/kerberos/keytabs
+      - sql-krb5-data:/var/kerberos/keytabs
     networks:
-      - demo-net
+      - sql-demo-net
 
   # ==========================================
   # 2. OpenLDAP Server
@@ -34,22 +34,22 @@ services:
     build:
       context: ./ldap
       dockerfile: Dockerfile
-    container_name: demo-openldap
+    container_name: sql-demo-ldap
     hostname: openldap
     restart: unless-stopped
     ports:
-      - "389:389"
+      - "1389:389"
     volumes:
-      - ldap-data:/var/lib/openldap/openldap-data
+      - sql-ldap-data:/var/lib/openldap/openldap-data
     networks:
-      - demo-net
+      - sql-demo-net
 
   # ==========================================
   # 3. PostgreSQL для Hive Metastore
   # ==========================================
   postgres-meta:
     image: postgres:16-alpine
-    container_name: demo-postgres-meta
+    container_name: sql-demo-postgres-meta
     hostname: postgres-meta
     restart: unless-stopped
     environment:
@@ -57,16 +57,16 @@ services:
       POSTGRES_USER: hive
       POSTGRES_PASSWORD: hivepassword
     volumes:
-      - pgdata-meta:/var/lib/postgresql/data
+      - sql-pgdata-meta:/var/lib/postgresql/data
     networks:
-      - demo-net
+      - sql-demo-net
 
   # ==========================================
   # 4. Hive Metastore (Apache Hive 4.0.0)
   # ==========================================
   hive-metastore:
     image: apache/hive:4.0.0
-    container_name: demo-hive-metastore
+    container_name: sql-demo-hive-metastore
     hostname: hive-metastore
     restart: unless-stopped
     environment:
@@ -78,18 +78,18 @@ services:
       - ./hive/hive-site.xml:/opt/hive/custom-conf/hive-site.xml:ro
       - ./hive/core-site.xml:/opt/hive/custom-conf/core-site.xml:ro
       - ./hive/yarn-site.xml:/opt/hive/custom-conf/yarn-site.xml:ro
-      - krb5-data:/etc/security/keytabs:ro
+      - sql-krb5-data:/etc/security/keytabs:ro
     depends_on:
       - kdc
     networks:
-      - demo-net
+      - sql-demo-net
 
   # ==========================================
   # 5. HiveServer2 (Kerberized + doAs)
   # ==========================================
   hive-server:
     image: apache/hive:4.0.0
-    container_name: demo-hive-server
+    container_name: sql-demo-hive-server
     hostname: hive-server
     restart: unless-stopped
     entrypoint: ["sh", "-c", "mkdir -p /tmp/hive && chmod 777 /tmp/hive; exec /entrypoint.sh"]
@@ -105,19 +105,19 @@ services:
       - ./hive/hive-site.xml:/opt/hive/custom-conf/hive-site.xml:ro
       - ./hive/core-site.xml:/opt/hive/custom-conf/core-site.xml:ro
       - ./hive/yarn-site.xml:/opt/hive/custom-conf/yarn-site.xml:ro
-      - krb5-data:/etc/security/keytabs:ro
+      - sql-krb5-data:/etc/security/keytabs:ro
     depends_on:
       - hive-metastore
       - kdc
     networks:
-      - demo-net
+      - sql-demo-net
 
   # ==========================================
   # 6. Trino Coordinator (Kerberized + TPCH + Hive)
   # ==========================================
   trino-coordinator:
     image: trinodb/trino:latest
-    container_name: demo-trino
+    container_name: sql-demo-trino
     hostname: trino-coordinator
     restart: unless-stopped
     ports:
@@ -125,12 +125,12 @@ services:
       - "8443:8443"
     volumes:
       - ./trino/etc:/etc/trino:ro
-      - krb5-data:/etc/security/keytabs:ro
+      - sql-krb5-data:/etc/security/keytabs:ro
     depends_on:
       - kdc
       - hive-metastore
     networks:
-      - demo-net
+      - sql-demo-net
 
   # ==========================================
   # 7. Наш сервис SQL Explorer
@@ -139,11 +139,11 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: demo-sql-explorer
+    container_name: sql-demo-explorer
     hostname: sql-explorer
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8002:8000"
     environment:
       CONFIG_PATH: /app/demo-config/config.demo.yaml
       KRB5_KEYTAB: /etc/security/keytabs/sql-explorer.keytab
@@ -152,12 +152,13 @@ services:
       PYTHONUNBUFFERED: "1"
     volumes:
       - ./config.demo.yaml:/app/demo-config/config.demo.yaml:ro
-      - krb5-data:/etc/security/keytabs:ro
-      - explorer-data:/app/data
+      - sql-krb5-data:/etc/security/keytabs:ro
+      - sql-explorer-data:/app/data
     depends_on:
       - kdc
       - openldap
       - hive-server
       - trino-coordinator
     networks:
-      - demo-net
+      - sql-demo-net
+
