@@ -10,7 +10,7 @@ echo "  Kerberos KDC + OpenLDAP + Hive 4 + Trino + Web UI       "
 echo "=========================================================="
 
 echo "[1/4] Сборка и запуск контейнеров в Docker..."
-docker compose -f docker-compose.yml up -d --build
+docker compose -f docker-compose.yaml up -d --build
 
 echo "[2/4] Ожидание готовности KDC и LDAP..."
 sleep 5
