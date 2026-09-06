@@ -20,8 +20,8 @@
 
 Хотя код каждого проекта хранится локально и автономно (для независимой сборки Docker-образов без внешних зависимостей), все три проекта **строго следуют единому архитектурному контракту**:
 
-### А. Универсальное хранилище Tri-Storage (`StorageService` / `TokenBlacklist`)
-- **Расположение**: `backend/app/services/storage.py` (или `app/core/token_blacklist.py`).
+### А. Универсальное хранилище Tri-Storage (`StorageService`)
+- **Расположение**: `backend/app/services/storage.py` (экспортирует синглтон `storage_service`; в `hdfs-explorer` модуль `app/core/token_blacklist.py` оставлен как алиас).
 - **Поддерживаемые бэкенды**:
   1. **Redis (`redis://...`, `rediss://...`)**:
      - *Rate Limiting*: атомарное скользящее окно через Sorted Set (`ratelimit:{key}`).
