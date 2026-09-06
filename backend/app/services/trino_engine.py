@@ -4,7 +4,7 @@ from typing import AsyncGenerator, Dict, Any, List, Optional
 import anyio
 import trino
 from trino.auth import BasicAuthentication, KerberosAuthentication
-from backend.app.config import ClusterConfig
+from backend.app.core.config import ClusterConfig
 
 logger = logging.getLogger("trino_engine")
 

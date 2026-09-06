@@ -12,7 +12,7 @@
   - **LDAPS (Active Directory / OpenLDAP / FreeIPA)**: Защищенный вход по логину/паролю с автоматическим получением групп пользователя (`memberOf` и рекурсивно).
   - **Гибкий ACL**: Ограничение доступа к Web-UI и к конкретным кластерам по списку пользователей и/или списку LDAP-групп.
   - **Персистентный отзыв токенов (High Availability)**: Двухуровневый черный список токенов в БД (SQLite / PostgreSQL) с автоочисткой и моментальной инвалидацией во всех репликах K8s.
-  - **Защита от XSS и CSP**: Полный отказ от `localStorage` для JWT (Zero LocalStorage) + изолирующий заголовок `Content-Security-Policy`.
+  - **Защита от XSS, CSRF и CSP**: Полный отказ от `localStorage` для JWT (Zero LocalStorage), защита от межсайтовой подделки запросов (`verify_csrf`) + изолирующий заголовок `Content-Security-Policy`.
   - **Аудит безопасности для SIEM/SOC**: Структурированные JSON-логи событий аутентификации, запросов и попыток несанкционированного доступа.
 - **Сквозная имперсонация (Impersonation / Proxy User)**:
   - **Trino**: Выполнение запросов от имени реального пользователя через заголовок `X-Trino-User`.
@@ -28,7 +28,7 @@
   - **Фоновая очередь задач**: Запросы продолжают исполняться на сервере даже при закрытии вкладки; просмотр статусов и загрузка результатов из архива.
   - **Desktop Notifications**: Браузерные уведомления при завершении длительных запросов.
 - **Готовность к Production и Kubernetes**:
-  - Готовый **Helm Chart** (`helm/sql-explorer`) для развертывания в Kubernetes с поддержкой Ingress, cert-manager, ConfigMap, Secrets и keytab.
+  - Готовый **Helm Chart** (`helm/sql-explorer`) для развертывания в Kubernetes с поддержкой Ingress, cert-manager, ConfigMap, Secrets, NetworkPolicy и keytab.
   - Поддержка **PostgreSQL** и **SQLite** (с PersistentVolumeClaim) для хранения истории, сохраненных запросов и реестра отозванных токенов.
 
 ---
@@ -40,19 +40,18 @@ sql-explorer/
 ├── backend/                  # Python FastAPI Backend
 │   ├── app/
 │   │   ├── api/              # REST & SSE эндпоинты (auth, clusters, catalog, queries)
-│   │   ├── core/             # Безопасность: LDAPS (ldap3), Kerberos (spnego), ACL, JWT, Audit Logging
+│   │   ├── core/             # config.py, security.py (PyJWT, CSRF, rate limit), acl.py, audit.py, ldap_auth.py, kerberos_auth.py
 │   │   ├── db/               # SQLAlchemy сессии (SQLite & PostgreSQL)
 │   │   ├── models/           # Модели данных: QueryHistory, SavedQuery, RevokedToken
 │   │   ├── services/         # Движки: TrinoEngine, HiveEngine, MockEngine, QueryManager
-│   │   ├── config.py         # Загрузка конфигурации (YAML + 12-factor ENV vars)
-│   │   └── main.py           # FastAPI app + healthz + раздача SPA статики
-│   ├── tests/                # Интеграционные тесты API и ACL
+│   │   └── main.py           # FastAPI app + healthz + Security Headers + раздача SPA статики
+│   ├── tests/                # Интеграционные тесты API, CSRF и ACL
 │   ├── docker-entrypoint.sh  # Инициализация Kerberos (kinit) и запуск
 │   └── requirements.txt      # Зависимости Python
 │
-├── frontend/                 # Svelte 5 SPA (Vite + TypeScript + Tailwind CSS)
+├── frontend/                 # Svelte 5 SPA (Vite + TypeScript + Tailwind CSS v4)
 │   ├── src/
-│   │   ├── api/              # Клиент API и обработка SSE потоков
+│   │   ├── api/              # Клиент API (X-Requested-With, credentials include) и SSE
 │   │   ├── components/       # Header, Sidebar, SqlEditor, QueryToolbar, ResultsGrid, QueueView, LoginModal
 │   │   ├── utils/            # Парсер мульти-запросов (sqlSplitter.ts)
 │   │   ├── types.ts          # Модели TypeScript
@@ -63,7 +62,7 @@ sql-explorer/
 │   └── sql-explorer/         # Production Helm-чарт для Kubernetes
 │       ├── Chart.yaml        # Метаданные чарта
 │       ├── values.yaml       # Параметры развертывания по умолчанию
-│       ├── templates/        # Шаблоны Deployment, Service, Ingress, ConfigMap, Secret, PVC
+│       ├── templates/        # Шаблоны Deployment, Service, Ingress, ConfigMap, Secret, PVC, NetworkPolicy, NOTES.txt
 │       └── README.md         # Руководство по установке чарта
 │
 ├── demo/                     # Автономный демонстрационный стенд (Docker Compose)

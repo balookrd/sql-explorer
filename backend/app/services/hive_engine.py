@@ -3,7 +3,7 @@ import re
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import anyio
 from impala.dbapi import connect as impala_connect
-from backend.app.config import ClusterConfig
+from backend.app.core.config import ClusterConfig
 
 logger = logging.getLogger("hive_engine")
 

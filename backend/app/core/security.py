@@ -2,12 +2,55 @@ import uuid
 import datetime
 from typing import Optional, List
 from pydantic import BaseModel
-from jose import JWTError, jwt
+import jwt
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from backend.app.config import settings
+from backend.app.core.config import settings
 
 security_bearer = HTTPBearer(auto_error=False)
+
+def verify_csrf(request: Request, is_cookie_auth: bool):
+    """
+    Защита от Cross-Site Request Forgery (CWE-352).
+    Если запрос аутентифицирован через Cookie и изменяет состояние (POST, PUT, DELETE, PATCH),
+    требуется подтверждение легитимности источника (Sec-Fetch-Site, Origin, X-Requested-With).
+    """
+    if not is_cookie_auth:
+        return
+
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        sec_fetch_site = request.headers.get("Sec-Fetch-Site")
+        if sec_fetch_site in ("cross-site",):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF protection: межсайтовый запрос отклонен (Sec-Fetch-Site: cross-site)"
+            )
+
+        origin = request.headers.get("Origin")
+        referer = request.headers.get("Referer")
+        x_requested_with = request.headers.get("X-Requested-With")
+
+        if x_requested_with == "XMLHttpRequest":
+            return
+
+        if origin:
+            allowed = set(settings.server.cors_origins)
+            host = request.headers.get("Host", "")
+            if origin in allowed or any(origin.endswith(f"://{host}") or f"://{host}" in origin for _ in [1]):
+                return
+
+        if referer:
+            host = request.headers.get("Host", "")
+            if f"://{host}/" in referer or referer.endswith(f"://{host}"):
+                return
+
+        if not (origin or referer or x_requested_with):
+            return
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF protection: запрос отклонен политикой безопасности источника"
+        )
 
 class UserSession(BaseModel):
     username: str
@@ -36,7 +79,7 @@ def decode_access_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(token, settings.auth.jwt.secret_key, algorithms=[settings.auth.jwt.algorithm])
         return payload
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 import hashlib
@@ -125,9 +168,12 @@ class LoginRateLimiter:
             # Очищаем попытки вне временного окна
             self.attempts[key] = [t for t in self.attempts[key] if now - t < self.window_seconds]
             if len(self.attempts[key]) >= self.max_attempts:
+                oldest = min(self.attempts[key])
+                retry_after = max(1, int(self.window_seconds - (now - oldest)))
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Слишком много неудачных попыток входа. Пожалуйста, подождите {self.window_seconds} секунд."
+                    detail=f"Слишком много неудачных попыток входа. Пожалуйста, подождите {retry_after} секунд.",
+                    headers={"Retry-After": str(retry_after)}
                 )
 
     def record_failed_attempt(self, key: str):
@@ -146,12 +192,14 @@ async def get_current_user(
     auth_header: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer)
 ) -> UserSession:
     token = None
+    is_cookie_auth = False
     # 1. Сначала проверяем Bearer заголовок
     if auth_header and auth_header.credentials:
         token = auth_header.credentials
     # 2. Либо Cookie сессии (удобно для EventSource/SSE и браузера)
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
+        is_cookie_auth = True
     # 3. Либо query параметр token (для обратной совместимости)
     elif "token" in request.query_params:
         token = request.query_params.get("token")
@@ -162,6 +210,9 @@ async def get_current_user(
             detail="Требуется авторизация",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Защита от CSRF атак при Cookie аутентификации
+    verify_csrf(request, is_cookie_auth)
 
     if await is_token_revoked_in_db(token):
         raise HTTPException(

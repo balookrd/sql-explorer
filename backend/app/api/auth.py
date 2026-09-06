@@ -1,7 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
-from backend.app.config import settings
+from backend.app.core.config import settings
 from backend.app.core.security import (
     create_access_token,
     decode_access_token,

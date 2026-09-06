@@ -275,3 +275,30 @@ async def test_security_csp_header_present():
         assert "frame-ancestors 'none'" in csp
         assert "worker-src 'self' blob:" in csp
 
+@pytest.mark.asyncio
+async def test_csrf_cookie_protection():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Логинимся
+        login_res = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        token = login_res.json()["access_token"]
+
+        # Мутирующий запрос через Cookie с нелегитимным Sec-Fetch-Site: cross-site -> 403
+        resp_csrf = await client.post(
+            "/api/queries/execute",
+            cookies={"access_token": token},
+            headers={"Sec-Fetch-Site": "cross-site"},
+            json={"cluster_id": "trino-analytics", "query": "SELECT 1;"}
+        )
+        assert resp_csrf.status_code == 403
+        assert "CSRF protection" in resp_csrf.json()["detail"]
+
+        # Легитимный запрос с X-Requested-With -> 200
+        resp_ok = await client.post(
+            "/api/queries/execute",
+            cookies={"access_token": token},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+            json={"cluster_id": "trino-analytics", "query": "SELECT 1;"}
+        )
+        assert resp_ok.status_code == 200
+

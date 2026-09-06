@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, Optional, List, Tuple
 import anyio
 from sqlalchemy import select, update, desc
-from backend.app.config import settings, ClusterConfig
+from backend.app.core.config import settings, ClusterConfig
 from backend.app.core.security import UserSession
 from backend.app.db.session import AsyncSessionLocal
 from backend.app.models.models import QueryHistory

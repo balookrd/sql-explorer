@@ -2,7 +2,7 @@ import logging
 import re
 from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from backend.app.config import settings, ClusterConfig
+from backend.app.core.config import settings, ClusterConfig
 from backend.app.core.security import get_current_user, UserSession
 from backend.app.core.acl import check_cluster_access
 from backend.app.services.trino_engine import TrinoExecutionEngine

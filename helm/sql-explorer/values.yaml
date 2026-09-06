@@ -232,3 +232,15 @@ customLdapCaCert: ""
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Настройка сетевых политик Kubernetes NetworkPolicy
+networkPolicy:
+  enabled: false
+  ingress:
+    from: []
+  egress:
+    allowDns: true
+    allowKerberos: true
+    allowLdap: true
+    allowTrino: true
+    allowHive: true

@@ -4,7 +4,7 @@ import random
 import datetime
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import anyio
-from backend.app.config import ClusterConfig
+from backend.app.core.config import ClusterConfig
 
 logger = logging.getLogger("mock_engine")
 

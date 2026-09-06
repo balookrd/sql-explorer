@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from backend.app.config import settings
+from backend.app.core.config import settings
 from backend.app.db.session import init_db
 from backend.app.api import auth, clusters, catalog, queries
 

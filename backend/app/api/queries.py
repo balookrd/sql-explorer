@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.app.config import settings
+from backend.app.core.config import settings
 from backend.app.core.security import get_current_user, UserSession
 from backend.app.core.acl import check_cluster_access
 from backend.app.core.audit import log_audit_event, AuditEventType

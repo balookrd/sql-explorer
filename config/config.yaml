@@ -9,7 +9,7 @@ server:
 
 database:
   # SQLite по умолчанию. Для PostgreSQL: "postgresql+asyncpg://user:pass@localhost:5432/sql_explorer"
-  url: "sqlite+aiosqlite:///./sql_explorer.db"
+  url: "sqlite+aiosqlite:///./data/sql_explorer.db"
 
 auth:
   # Режим аутентификации: hybrid (Kerberos SPNEGO + LDAPS), ldaps_only, kerberos_only, mock

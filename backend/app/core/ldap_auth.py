@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from ldap3 import Server, Connection, ALL, Tls, SUBTREE
 from ldap3.core.exceptions import LDAPException, LDAPBindError
 from ldap3.utils.conv import escape_filter_chars
-from backend.app.config import settings
+from backend.app.core.config import settings
 
 logger = logging.getLogger("ldap_auth")
 

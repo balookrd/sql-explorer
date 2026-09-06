@@ -1,5 +1,5 @@
 from typing import List
-from backend.app.config import settings, ClusterConfig
+from backend.app.core.config import settings, ClusterConfig
 from backend.app.core.security import UserSession
 
 def check_ui_access(user: UserSession) -> bool:

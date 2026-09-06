@@ -2,7 +2,7 @@ import base64
 import logging
 from typing import Optional, Dict, Any
 import spnego
-from backend.app.config import settings
+from backend.app.core.config import settings
 
 logger = logging.getLogger("kerberos_auth")
 

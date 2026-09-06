@@ -47,4 +47,8 @@ else
 fi
 
 echo "[entrypoint] Запуск веб-сервера..."
-exec python -m backend.app.main
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+else
+    exec python -m backend.app.main
+fi
