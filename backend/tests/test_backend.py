@@ -516,5 +516,87 @@ def test_sanitizer_escaped_quotes():
     assert processed.endswith("LIMIT 1000")
 
 
+@pytest.mark.asyncio
+async def test_security_readonly_dml_ddl_rejection():
+    """Проверка, что запросы DROP, TRUNCATE, DELETE, ALTER отклоняются в Read-Only кластерах"""
+    await init_db()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        login_resp = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
+        dangerous_queries = [
+            "DROP TABLE analytics.users",
+            "TRUNCATE TABLE reporting.daily_stats",
+            "DELETE FROM default.orders WHERE 1=1",
+            "ALTER TABLE users ADD COLUMN secret VARCHAR",
+            "CREATE TABLE evil (id INT)"
+        ]
+        for dq in dangerous_queries:
+            resp = await client.post(
+                "/api/queries/execute",
+                headers=headers,
+                json={"cluster_id": "trino-analytics", "query": dq}
+            )
+            assert resp.status_code == 403, f"Запрос '{dq}' должен быть заблокирован"
+            assert "запрещен" in resp.json()["detail"].lower() or "read-only" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_security_csrf_on_logout_cookie():
+    """Проверка защиты от CSRF при выходе из системы (logout) по cookie"""
+    await init_db()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        login_resp = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        assert login_resp.status_code == 200
+
+        # Попытка межсайтового logout (Sec-Fetch-Site: cross-site) без Bearer заголовка
+        csrf_resp = await client.post(
+            "/api/auth/logout",
+            headers={"Sec-Fetch-Site": "cross-site", "Origin": "http://malicious-site.com"}
+        )
+        assert csrf_resp.status_code == 403
+        assert "CSRF" in csrf_resp.json()["detail"]
+
+        # Легитимный logout (Sec-Fetch-Site: same-origin)
+        legit_resp = await client.post(
+            "/api/auth/logout",
+            headers={"Sec-Fetch-Site": "same-origin", "Origin": "http://localhost:8000"}
+        )
+        assert legit_resp.status_code == 200
+
+
+def test_production_security_validation():
+    """Проверка, что debug=False запрещает mock-аутентификацию и дефолтные JWT секреты"""
+    from backend.app.core.config import AppConfig, ServerConfig, AuthConfig, JWTConfig
+
+    # Попытка создать конфиг с debug=False и mock auth -> ValueError
+    with pytest.raises(ValueError, match="Mock authentication cannot be used in production"):
+        AppConfig(
+            server=ServerConfig(debug=False),
+            auth=AuthConfig(mode="mock")
+        )
+
+    # Попытка создать конфиг с debug=False и слабым JWT секретом -> ValueError
+    with pytest.raises(ValueError, match="JWT_SECRET_KEY must be set"):
+        AppConfig(
+            server=ServerConfig(debug=False),
+            auth=AuthConfig(mode="ldaps_only", jwt=JWTConfig(secret_key="short"))
+        )
+
+
+def test_trusted_cidr_proxy(monkeypatch):
+    """Проверка поддержки CIDR подсетей доверенных прокси (Kubernetes Ingress)"""
+    from backend.app.core.security import is_trusted_proxy
+    monkeypatch.setenv("TRUSTED_CIDRS", "10.0.0.0/8,172.16.0.0/12")
+
+    assert is_trusted_proxy("10.244.1.5") is True
+    assert is_trusted_proxy("172.20.10.4") is True
+    assert is_trusted_proxy("192.168.1.100") is False
+    assert is_trusted_proxy("8.8.8.8") is False
+
+
+
 
 

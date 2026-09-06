@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import yaml
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class MockUser(BaseModel):
     username: str
@@ -63,6 +63,7 @@ class ClusterConfig(BaseModel):
     schema_: Optional[str] = Field(default=None, alias="schema")
     auth: Dict[str, Any] = Field(default_factory=dict)
     impersonation: ImpersonationConfig = Field(default_factory=ImpersonationConfig)
+    allow_dml_ddl: bool = False
     acl: ClusterAclConfig = Field(default_factory=ClusterAclConfig)
 
     model_config = {"populate_by_name": True}
@@ -110,6 +111,25 @@ class AppConfig(BaseModel):
     query_defaults: QueryDefaultsConfig = Field(default_factory=QueryDefaultsConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
 
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "AppConfig":
+        if not self.server.debug:
+            if self.auth.mode == "mock" or (self.auth.mode != "kerberos_only" and not self.auth.ldap.enabled):
+                raise ValueError(
+                    "Mock authentication cannot be used in production mode (debug=False). "
+                    "Please configure LDAP/Kerberos or set server.debug=True for local development."
+                )
+            insecure_defaults = (
+                "change-this-to-a-very-secret-random-key-in-production",
+                "secret-key-for-dev-only",
+                "default-secret-key-change-it"
+            )
+            if self.auth.jwt.secret_key in insecure_defaults or len(self.auth.jwt.secret_key) < 32:
+                raise ValueError(
+                    "JWT_SECRET_KEY must be set to a secure unique string (at least 32 characters) in production mode."
+                )
+        return self
+
 def load_config(config_path: Optional[str] = None) -> AppConfig:
     if not config_path:
         env_cfg = os.getenv("CONFIG_PATH")
@@ -131,6 +151,11 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         cfg = AppConfig()
 
     # Переопределение из переменных окружения (12-Factor App / Kubernetes Secrets)
+    if os.getenv("SERVER_DEBUG") is not None:
+        cfg.server.debug = os.environ["SERVER_DEBUG"].lower() in ("true", "1", "yes")
+    elif os.getenv("DEBUG") is not None:
+        cfg.server.debug = os.environ["DEBUG"].lower() in ("true", "1", "yes")
+
     if os.getenv("DATABASE_URL"):
         cfg.database.url = os.environ["DATABASE_URL"]
     if os.getenv("JWT_SECRET_KEY"):
@@ -158,6 +183,6 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
     if os.getenv("AI_MODEL"):
         cfg.ai.model = os.environ["AI_MODEL"]
 
-    return cfg
+    return cfg.validate_production_security()
 
 settings = load_config()

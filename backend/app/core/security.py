@@ -1,3 +1,4 @@
+import os
 import uuid
 import datetime
 import ipaddress
@@ -10,14 +11,37 @@ from backend.app.core.config import settings
 
 security_bearer = HTTPBearer(auto_error=False)
 
-TRUSTED_PROXIES = {"127.0.0.1", "::1", "localhost", "testclient"}
+def _get_trusted_proxies() -> set[str]:
+    base = {"127.0.0.1", "::1", "localhost", "testclient"}
+    env_p = os.getenv("TRUSTED_PROXIES", "")
+    if env_p:
+        base.update(p.strip() for p in env_p.split(",") if p.strip())
+    return base
+
+def _get_trusted_cidrs() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    env_c = os.getenv("TRUSTED_CIDRS", "")
+    cidrs = []
+    if env_c:
+        for net in env_c.split(","):
+            net = net.strip()
+            if net:
+                try:
+                    cidrs.append(ipaddress.ip_network(net, strict=False))
+                except ValueError:
+                    pass
+    return cidrs
 
 def is_trusted_proxy(host: str) -> bool:
-    if host in TRUSTED_PROXIES:
+    if host in _get_trusted_proxies():
         return True
     try:
         ip = ipaddress.ip_address(host)
-        return ip.is_loopback
+        if ip.is_loopback:
+            return True
+        for cidr in _get_trusted_cidrs():
+            if ip in cidr:
+                return True
+        return False
     except ValueError:
         return False
 

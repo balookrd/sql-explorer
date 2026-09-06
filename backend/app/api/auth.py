@@ -9,7 +9,8 @@ from backend.app.core.security import (
     get_client_ip,
     UserSession,
     revoke_token_in_db,
-    login_rate_limiter
+    login_rate_limiter,
+    verify_csrf
 )
 from backend.app.core.acl import check_ui_access
 from backend.app.core.ldap_auth import authenticate_ldap, get_ldap_user_info
@@ -231,10 +232,16 @@ async def get_me(current_user: UserSession = Depends(get_current_user)):
 async def logout(request: Request, response: Response):
     auth_header = request.headers.get("Authorization")
     token = None
+    is_cookie_auth = False
+
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
+        is_cookie_auth = True
+
+    if is_cookie_auth:
+        verify_csrf(request, is_cookie_auth=True)
 
     client_ip = get_client_ip(request)
     if token:

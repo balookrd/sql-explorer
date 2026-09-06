@@ -224,6 +224,13 @@ class QueryManager:
         }
 
     async def start_query(self, cluster: ClusterConfig, user: UserSession, query_text: str) -> str:
+        # Проверка Read-Only ограничений (защита от несанкционированных DROP/TRUNCATE/DELETE/ALTER/CREATE)
+        if not getattr(cluster, "allow_dml_ddl", False):
+            from backend.app.services.ai_service import validate_readonly_sql_ast
+            is_safe, err_msg = validate_readonly_sql_ast(query_text, dialect=cluster.type)
+            if not is_safe:
+                raise ValueError(err_msg or "Кластер работает в режиме Read-Only. Выполнение DDL/DML запросов запрещено.")
+
         query_id = str(uuid.uuid4())
         processed_query = self._sanitize_and_limit_query(query_text)
         
