@@ -64,11 +64,16 @@
 - Записывает логи в stdout приложения и в файл аудита, если задана переменная окружения `AUDIT_LOG_FILE`.
 
 ### Е. Единый версионированный стандарт API (`/api/v1/*`)
-Все эндпоинты аутентификации во всех трех проектах строго стандартизированы:
-- `POST /api/v1/auth/login` — аутентификация (LDAP, Mock, Hybrid) с выдачей JWT и/или сессионной куки.
-- `POST /api/v1/auth/logout` — выход из системы, проверка CSRF и серверный отзыв токена.
-- `GET  /api/v1/auth/me` — профиль текущего пользователя, системная роль и группы.
-- `POST /api/v1/auth/spnego` (или `/negotiate`, `/sso`) — Kerberos SPNEGO SSO аутентификация.
+Все маршруты бэкенда и вызовы клиентов фронтенда во всех трех проектах строго версионированы с префиксом `/api/v1/*`. Устаревшие неверсионированные префиксы `/api/*` полностью исключены.
+- **Аутентификация (`/api/v1/auth/*`)**:
+  - `POST /api/v1/auth/login` — аутентификация (LDAP, Mock, Hybrid) с выдачей JWT и/или сессионной куки.
+  - `POST /api/v1/auth/logout` — выход из системы, проверка CSRF и серверный отзыв токена.
+  - `GET  /api/v1/auth/me` — профиль текущего пользователя, системная роль и группы.
+  - `POST /api/v1/auth/spnego` (или `/negotiate`, `/sso`) — Kerberos SPNEGO SSO аутентификация.
+- **Кластеры и бизнес-сущности**:
+  - `sql-explorer`: `/api/v1/clusters`, `/api/v1/catalog`, `/api/v1/queries`, `/api/v1/ai`
+  - `hdfs-explorer`: `/api/v1/clusters`, `/api/v1/clusters/{id}/files`, `/api/v1/clusters/cross-copy`
+  - `yarn-explorer`: `/api/v1/clusters`, `/api/v1/clusters/{id}/queues`, `/api/v1/change-requests`
 
 ### Ж. Валидация безопасности Production-окружения (`validate_production_security`)
 - При отключенном режиме отладки (`server.debug: false` или `SERVER_DEBUG=false`):
