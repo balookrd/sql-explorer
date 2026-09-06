@@ -1,105 +1,186 @@
-# SQL Web Explorer (Trino & Apache Hive / Hortonworks / Cloudera)
+# SQL Web Explorer (Trino & Apache Hive)
 
-Современный корпоративный Web-интерфейс для выполнения SQL-запросов к распределенным аналитическим движкам **Trino** и **Apache Hive (HiveServer2)** с поддержкой мультикластерности, аутентификации через **LDAPS** и **Kerberos SPNEGO SSO**, сквозной **имперсонации (impersonation / doAs)**, гибкой ролевой модели **ACL** и деплоя в **Kubernetes (Helm)**.
+**SQL Web Explorer** — современный корпоративный веб-портал для интерактивной аналитики и выполнения SQL-запросов к распределенным движкам **Trino** и **Apache Hive (HiveServer2 / Cloudera / Hortonworks)**. Поддерживает мультикластерность, аутентификацию через **LDAPS** и **Kerberos SPNEGO SSO**, сквозную имперсонацию пользователей (**`doAs` / `X-Trino-User`**), разграничение доступа (**ACL**), фоновое исполнение запросов и промышленное развертывание в **Kubernetes (Helm)**.
 
 ---
 
-## Ключевые возможности
+## 📑 Содержание
 
-- **Мультикластерность**: Поддержка нескольких независимых кластеров Trino и Hive (Hortonworks HDP, Cloudera CDP, чистый Apache Hive) с мгновенным переключением в UI.
-- **Enterprise Security & SIEM Audit**:
-  - **Kerberos SPNEGO SSO**: Бесшовный вход без ввода пароля через тикеты Kerberos в браузере.
-  - **LDAPS (Active Directory / OpenLDAP / FreeIPA)**: Защищенный вход по логину/паролю с автоматическим получением групп пользователя (`memberOf` и рекурсивно).
-  - **Гибкий ACL**: Ограничение доступа к Web-UI и к конкретным кластерам по списку пользователей и/или списку LDAP-групп.
-  - **Персистентный отзыв токенов (High Availability)**: Двухуровневый черный список токенов в БД (SQLite / PostgreSQL) с автоочисткой и моментальной инвалидацией во всех репликах K8s.
-  - **Защита от XSS, CSRF и CSP**: Полный отказ от `localStorage` для JWT (Zero LocalStorage), защита от межсайтовой подделки запросов (`verify_csrf`) + изолирующий заголовок `Content-Security-Policy`.
-  - **Аудит безопасности для SIEM/SOC**: Структурированные JSON-логи событий аутентификации, запросов и попыток несанкционированного доступа.
+- [Специализированная документация](#-специализированная-документация)
+- [Ключевые возможности](#-ключевые-возможности)
+- [Архитектура решения](#-архитектура-решения)
+- [Быстрый старт: Демо-стенд в Docker](#-быстрый-старт-демонстрационный-стенд-в-docker)
+- [Тестовые учетные записи (LDAP)](#-тестовые-учетные-записи-ldap)
+- [Локальная разработка](#-локальная-разработка)
+- [Конфигурация (`config.yaml`)](#️-конфигурация-configyaml)
+- [Развертывание в Kubernetes (Helm)](#️-развертывание-в-kubernetes-helm)
+- [Тестирование](#-тестирование)
+- [Структура проекта](#-структура-проекта)
+- [Лицензия](#-лицензия)
+
+---
+
+## 📚 Специализированная документация
+
+| Документ | Содержание |
+|---|---|
+| 🎪 **[DEMO.md](DEMO.md)** | Подробное руководство по керберизированному демо-стенду (Trino, Hive, Metastore, OpenLDAP, MIT KDC) и сценарии проверки |
+| ☸️ **[helm/sql-explorer/README.md](helm/sql-explorer/README.md)** | Описание параметров `values.yaml`, сетевых политик, Ingress и инструкция по Helm-деплою в Kubernetes |
+| ⚙️ **[backend/README.md](backend/README.md)** | Спецификация REST API, архитектура FastAPI, движки Trino/Hive, безопасность и запуск тестов |
+| 🎨 **[frontend/README.md](frontend/README.md)** | Архитектура интерфейса на Svelte 5 (Runes), Monaco Editor, SSE стриминг и сборка |
+
+---
+
+## 🚀 Ключевые возможности
+
+### 1. Мультикластерность и аналитические движки
+- **Единая точка входа**: одновременная работа с несколькими независимыми кластерами Trino и Apache Hive (CDP, HDP, Apache) с переключением в реальном времени без перезагрузки интерфейса.
 - **Сквозная имперсонация (Impersonation / Proxy User)**:
-  - **Trino**: Выполнение запросов от имени реального пользователя через заголовок `X-Trino-User`.
-  - **Hive (HiveServer2)**: Выполнение запросов с параметром `hive.server2.proxy.user` (doAs).
-  - Обеспечивает строгое соблюдение политик безопасности **Apache Ranger** и **Trino System Access Control** на уровне хранилища данных.
-- **Современный Web-UI (Svelte 5 + TypeScript + Tailwind CSS)**:
-  - **Monaco Editor** (движок VS Code) со светлой темой, диалектами SQL, подсветкой синтаксиса Trino/Hive, шорткатами `Cmd+Enter` / `Ctrl+Enter`.
-  - **Мульти-запросы**: Выполнение нескольких запросов на одной странице, запуск выделенного фрагмента текста или запроса под текущей позицией курсора.
-  - **Дерево схемы данных (Schema Explorer)**: Интерактивный просмотр Каталогов -> Схем -> Таблиц -> Колонок и типов данных.
-  - **Стриминг результатов**: Server-Sent Events (SSE) в реальном времени с отображением прогресса и таймингов.
-  - **Отмена запросов**: Кнопка «Stop» немедленно посылает сигнал отмены в координатор Trino/Hive и освобождает кластерные ресурсы.
-  - **Виртуализированная таблица**: Фильтрация, пагинация, мгновенный экспорт в **CSV** и **JSON** с защитой от CSV Formula Injection.
-  - **Фоновая очередь задач**: Запросы продолжают исполняться на сервере даже при закрытии вкладки; просмотр статусов и загрузка результатов из архива.
-  - **Desktop Notifications**: Браузерные уведомления при завершении длительных запросов.
-- **Готовность к Production и Kubernetes**:
-  - Готовый **Helm Chart** (`helm/sql-explorer`) для развертывания в Kubernetes с поддержкой Ingress, cert-manager, ConfigMap, Secrets, NetworkPolicy и keytab.
-  - Поддержка **PostgreSQL** и **SQLite** (с PersistentVolumeClaim) для хранения истории, сохраненных запросов и реестра отозванных токенов.
+  - **Trino**: Выполнение запросов от имени реального вошедшего пользователя через заголовок `X-Trino-User`.
+  - **Hive (HiveServer2)**: Выполнение запросов с параметром `hive.server2.proxy.user` (`doAs`).
+  - Строгое соблюдение политик безопасности **Apache Ranger** и **Trino System Access Control** на уровне хранилища данных.
+- **Интерактивный каталог (Schema Explorer)**: древовидный просмотр Каталогов -> Схем -> Таблиц -> Колонок с типами данных и быстрой вставкой имен в редактор.
+
+### 2. Корпоративная безопасность и аудит
+- **Kerberos SPNEGO SSO**: бесшовный сквозной вход без ввода пароля по билетам Kerberos из браузера (`Authorization: Negotiate`).
+- **LDAPS (Active Directory / OpenLDAP / FreeIPA)**: аутентификация по логину/паролю с автоматическим получением ролевых групп пользователя.
+- **Разграничение прав (ACL)**: гранулярные списки доступа к веб-интерфейсу и к каждому кластеру по пользователям и LDAP-группам.
+- **Эшелонированная защита (OWASP Top 10)**:
+  - Сессионные токены передаются исключительно через защищенные `HttpOnly`, `SameSite=Lax` Cookie (полный отказ от `localStorage` для защиты от XSS).
+  - Автоматическая защита от CSRF (`verify_csrf`) по заголовкам `Sec-Fetch-Site`, `Origin`, `Referer` и `X-Requested-With: XMLHttpRequest`.
+  - Скользящий лимитер запросов (Rate Limiting) на эндпоинте входа для защиты от подбора паролей с заголовком `Retry-After`.
+  - Персистентный отзыв токенов при выходе (Logout Blacklist в SQLite / PostgreSQL).
+  - Автоматические HTTP Security Headers (`Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`).
+  - Структурированный аудит безопасности (JSON) всех операций входа и выполнения запросов для интеграции с SIEM/SOC.
+  - Запуск Docker-контейнера от непривилегированного пользователя (`appuser`, UID 10001).
+
+### 3. Продвинутый редактор и фоновые очереди
+- **Monaco Editor (движок VS Code)**: подсветка синтаксиса Trino/Hive SQL, автодополнение, форматирование и горячие клавиши (`Cmd+Enter` / `Ctrl+Enter`).
+- **Выполнение мульти-запросов**: разделение цепочек SQL по `;`, выполнение выделенного фрагмента или запроса под текущей позицией курсора.
+- **Стриминг результатов в реальном времени**: передача строк через Server-Sent Events (SSE) с индикацией таймингов и возможностью экстренной отмены (`Stop`).
+- **Фоновая очередь задач**: запросы продолжают исполняться на кластере даже при закрытии вкладки браузера.
+- **Виртуализированная таблица результатов**: мгновенный просмотр больших выборок с фильтрацией, пагинацией и безопасным экспортом в CSV и JSON.
 
 ---
 
-## Архитектура проекта
+## 🏗 Архитектура решения
 
-```
-sql-explorer/
-├── backend/                  # Python FastAPI Backend
-│   ├── app/
-│   │   ├── api/              # REST & SSE эндпоинты (auth, clusters, catalog, queries)
-│   │   ├── core/             # config.py, security.py (PyJWT, CSRF, rate limit), acl.py, audit.py, ldap_auth.py, kerberos_auth.py
-│   │   ├── db/               # SQLAlchemy сессии (SQLite & PostgreSQL)
-│   │   ├── models/           # Модели данных: QueryHistory, SavedQuery, RevokedToken
-│   │   ├── services/         # Движки: TrinoEngine, HiveEngine, MockEngine, QueryManager
-│   │   └── main.py           # FastAPI app + healthz + Security Headers + раздача SPA статики
-│   ├── tests/                # Интеграционные тесты API, CSRF и ACL
-│   ├── docker-entrypoint.sh  # Инициализация Kerberos (kinit) и запуск
-│   └── requirements.txt      # Зависимости Python
-│
-├── frontend/                 # Svelte 5 SPA (Vite + TypeScript + Tailwind CSS v4)
-│   ├── src/
-│   │   ├── api/              # Клиент API (X-Requested-With, credentials include) и SSE
-│   │   ├── components/       # Header, Sidebar, SqlEditor, QueryToolbar, ResultsGrid, QueueView, LoginModal
-│   │   ├── utils/            # Парсер мульти-запросов (sqlSplitter.ts)
-│   │   ├── types.ts          # Модели TypeScript
-│   │   └── App.svelte        # Главный компонент (Svelte 5 Runes)
-│   └── package.json
-│
-├── helm/
-│   └── sql-explorer/         # Production Helm-чарт для Kubernetes
-│       ├── Chart.yaml        # Метаданные чарта
-│       ├── values.yaml       # Параметры развертывания по умолчанию
-│       ├── templates/        # Шаблоны Deployment, Service, Ingress, ConfigMap, Secret, PVC, NetworkPolicy, NOTES.txt
-│       └── README.md         # Руководство по установке чарта
-│
-├── demo/                     # Автономный демонстрационный стенд (Docker Compose)
-│   ├── docker-compose.yaml     # Trino, Hive, Metastore, OpenLDAP, MIT KDC, SQL Explorer
-│   ├── start-demo.sh         # Скрипт запуска стенда
-│   └── stop-demo.sh          # Скрипт остановки стенда
-│
-├── config/
-│   └── config.yaml           # Конфигурация кластеров, LDAP, Kerberos и ACL
-├── Dockerfile                # Multi-stage Docker образ (Node.js -> Python)
-└── docker-compose.yml        # Базовый Docker Compose сценарий
+```mermaid
+flowchart TD
+    Browser["Веб-браузер пользователя"]
+    Frontend["Frontend UI (Svelte 5 + Monaco Editor SPA)"]
+    Backend["Backend Service (FastAPI + SQLAlchemy)"]
+    LDAP["OpenLDAP / Active Directory (LDAPS :636)"]
+    KDC["Kerberos KDC (Keytab & SPNEGO :88)"]
+    Trino["Trino Coordinator (Impersonation X-Trino-User)"]
+    Hive["Apache HiveServer2 (Impersonation doAs)"]
+    DB[("База данных (PostgreSQL / SQLite PVC)")]
+
+    Browser -->|HTTPS / WSS| Frontend
+    Frontend -->|REST API + SSE + Secure Cookie| Backend
+    Backend -->|1. Проверка логина и групп| LDAP
+    Backend -->|2. SPNEGO / kinit сервисный тикет| KDC
+    Backend -->|3. SQL + X-Trino-User| Trino
+    Backend -->|4. TCLIService + doAs| Hive
+    Backend -->|История и отозванные токены| DB
 ```
 
 ---
 
-## Настройка корпоративной безопасности
+## 🐳 Быстрый старт: Демонстрационный стенд в Docker
 
-### 1. Настройка Kerberos SPNEGO SSO
-1. Создайте сервисный principal для Web-сервера в Active Directory / MIT KDC:
-   ```bash
-   ktpass -princ HTTP/sql-explorer.company.local@COMPANY.LOCAL \
-          -mapuser svc_sql_explorer \
-          -pass SecretPass \
-          -crypto AES256-SHA1 \
-          -ptype KRB5_NT_PRINCIPAL \
-          -out /etc/security/keytabs/sql-explorer.keytab
-   ```
-2. В `config/config.yaml` укажите путь к `keytab_file` и имя `service_principal`.
-3. На стороне клиентов настройте браузер на доверие домену:
-   - **Chrome / Edge**: флаг `--auth-server-whitelist="*.company.local"` (или через GPO `AuthServerWhitelist`).
-   - **Firefox**: параметр `network.negotiate-auth.trusted-uris` = `.company.local`.
+В репозиторий включен полностью автономный керберизированный демо-стенд, содержащий Trino, Hive 4, PostgreSQL Metastore, OpenLDAP и MIT Kerberos KDC.
 
-### 2. Настройка LDAPS
-В `config/config.yaml` укажите параметры подключения к Active Directory / OpenLDAP:
+### Состав стенда:
+| Контейнер | Назначение | Адрес на хосте |
+|---|---|---|
+| **`sql-demo-explorer`** | Портал SQL Web Explorer (Backend + UI) | **[http://localhost:8002](http://localhost:8002)** |
+| **`sql-demo-trino`** | Координатор Trino с каталогами `tpch` и `hive` | [http://localhost:8080](http://localhost:8080) |
+| **`sql-demo-hive`** | Apache HiveServer2 с поддержкой Kerberos и `doAs` | `localhost:10000` |
+| **`sql-demo-ldap`** | Сервер каталогов OpenLDAP | `localhost:389` |
+| **`sql-demo-kdc`** | MIT Kerberos KDC (`COMPANY.LOCAL`) | `localhost:88` |
+
+### Запуск одной командой:
+```bash
+./demo/start-demo.sh
+```
+*(или `docker compose -f demo/docker-compose.yaml up -d --build`)*
+
+После запуска веб-интерфейс доступен по адресу: 👉 **[http://localhost:8002](http://localhost:8002)**.  
+Подробное руководство со сценариями тестирования доступно в **[DEMO.md](DEMO.md)**.
+
+### Остановка стенда:
+```bash
+./demo/stop-demo.sh
+```
+
+---
+
+## 🔐 Тестовые учетные записи (LDAP)
+
+| Логин | Пароль | Ролевая группа | Назначение и доступ к кластерам |
+|---|---|---|---|
+| **`analyst_user`** | `password123` | `bi-analysts`, `reporting` | Доступ к Trino и общему Hive; нет доступа к HDP кластеру инженеров |
+| **`de_user`** | `password123` | `data-engineers`, `bi-analysts` | Полный доступ к Trino, Hive Core и защищенному Hive HDP |
+| **`admin_user`** | `password123` | `data-platform-admins` | Администратор платформы, полный доступ ко всем кластерам и настройкам |
+
+---
+
+## 💻 Локальная разработка
+
+### Требования:
+- Python 3.11+
+- Node.js 20+ и npm
+- Системные библиотеки Kerberos (`libkrb5-dev` в Debian/Ubuntu или Xcode CLI tools в macOS)
+
+### 1. Запуск Backend:
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Запуск dev-сервера с автоматической перезагрузкой
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 2. Запуск Frontend:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Фронтенд запустится на `http://localhost:5173` и будет автоматически проксировать `/api` на бэкенд `localhost:8000`.
+
+### 3. Production сборка единого контейнера:
+```bash
+docker build -t sql-explorer:latest .
+docker run -d -p 8000:8000 -v $(pwd)/config:/app/config sql-explorer:latest
+```
+
+---
+
+## ⚙️ Конфигурация (`config.yaml`)
+
+Конфигурация задается через YAML-файл (путь передается через переменную `CONFIG_PATH`):
+
 ```yaml
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: false
+  cors_origins: ["http://localhost:8000", "http://localhost:5173"]
+  secure_cookies: false
+
+database:
+  # SQLite по умолчанию. Для PostgreSQL: "postgresql+asyncpg://user:pass@host:5432/sql_explorer"
+  url: "sqlite+aiosqlite:///./data/sql_explorer.db"
+
 auth:
-  mode: "hybrid" # hybrid (Kerberos + LDAPS), ldaps_only, kerberos_only, mock
+  mode: "hybrid" # hybrid (Kerberos SPNEGO + LDAPS), ldaps_only, kerberos_only, mock
+  jwt:
+    secret_key: "CHANGE-ME-IN-PRODUCTION-RANDOM-SECRET"
+    expire_minutes: 480
   ldap:
     enabled: true
     server_uri: "ldaps://ad.company.local:636"
@@ -107,236 +188,126 @@ auth:
     bind_dn: "cn=svc_sql_explorer,ou=services,dc=company,dc=local"
     bind_password: "ServicePassword"
     user_base_dn: "ou=users,dc=company,dc=local"
-    user_filter: "(&(objectClass=user)(sAMAccountName={username}))"
     group_base_dn: "ou=groups,dc=company,dc=local"
-    ca_cert_file: "/etc/ssl/certs/company-ca.crt"
-```
-
-### 3. Настройка имперсонации в Trino
-Сервисный аккаунт приложения авторизуется на координаторе Trino, а запрос исполняется от имени пользователя через заголовок `X-Trino-User`.
-
-В файле конфигурации Trino `etc/access-control.properties`:
-```properties
-access-control.name=file
-security.config-file=etc/rules.json
-```
-В файле `etc/rules.json` разрешите сервисному пользователю `svc_sql_explorer` имперсонировать пользователей:
-```json
-{
-  "impersonation": [
-    {
-      "original_user": "svc_sql_explorer",
-      "new_user": ".*",
-      "allow": true
-    }
-  ]
-}
-```
-
-### 4. Настройка имперсонации в Apache Hive & Hortonworks / Cloudera
-В конфигурации Hadoop / Hive (`core-site.xml`) на кластере добавьте права Proxy User для сервисного аккаунта:
-```xml
-<property>
-  <name>hadoop.proxyuser.hive.hosts</name>
-  <value>*</value>
-</property>
-<property>
-  <name>hadoop.proxyuser.hive.groups</name>
-  <value>*</value>
-</property>
-```
-Backend передает параметр `hive.server2.proxy.user: <username>` при открытии сессии HiveServer2.
-
----
-
-## Комплексная безопасность (Hardening & Security Controls)
-
-В архитектуру приложения заложены механизмы защиты от распространенных уязвимостей (согласно рекомендациям OWASP Top 10):
-
-1. **Защита от инъекций (Injection Defense)**:
-   - **SQL Injection**: На уровне API каталога метаданных ([catalog.py](file:///Users/mvmalykh/IdeaProjects/sql-explorer/backend/app/api/catalog.py)) параметры `catalog`, `schema` и `table` строго валидируются регулярным выражением (`^[a-zA-Z0-9_\-]+$`), а на уровне движков [trino_engine.py](file:///Users/mvmalykh/IdeaProjects/sql-explorer/backend/app/services/trino_engine.py) и [hive_engine.py](file:///Users/mvmalykh/IdeaProjects/sql-explorer/backend/app/services/hive_engine.py) безопасно экранируются и квотируются.
-   - **LDAP Injection**: Все пользовательские входные данные экранируются утилитой `escape_filter_chars` библиотеки `ldap3` перед формированием поисковых фильтров `user_filter` и `group_filter`.
-   - **CSV / Formula Injection**: При экспорте данных в CSV любые значения ячеек, начинающиеся с формульных спецсимволов (`=`, `+`, `-`, `@`, `\t`, `\r`), автоматически экранируются префиксом `'`, что предотвращает исполнение вредоносных формул и команд DDE в табличных редакторах (Excel, Calc).
-
-2. **Контроль доступа на уровне объектов (BOLA / IDOR Prevention)**:
-   - Доступ к стримам выполнения запросов (`GET /api/queries/{query_id}/stream`) и к кэшированным результатам строго разграничен: подписаться на события и просмотреть данные может только владелец запроса (`username`) либо системный администратор (`admin_groups`).
-
-3. **Сетевая безопасность, сессии и токены**:
-   - **Защитные HTTP-заголовки (Security Headers & Content-Security-Policy Middleware)**: Сервер автоматически проставляет во все HTTP-ответы заголовки `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Content-Security-Policy` (с изолированными источниками для Monaco Editor и Web Workers) и `Strict-Transport-Security: max-age=31536000; includeSubDomains` (при HTTPS).
-   - **Встроенный Rate Limiting аутентификации**: Эндпоинт `/api/auth/login` защищен скользящим лимитером (до 5 неудачных попыток в минуту на связку `IP:username`). При превышении лимита возвращается `429 Too Many Requests`, предотвращая перебор паролей и блокировку учетных записей в Active Directory.
-   - **Отзыв токенов при Logout (Persistent Token Blacklist в SQLite/PostgreSQL)**: При вызове `/api/auth/logout` хэш текущего JWT токена (SHA-256) сохраняется в персистентную базу данных (SQLite или PostgreSQL в зависимости от настроек) и кэшируется в памяти (L1-кэш). Это гарантирует мгновенную инвалидацию токена со статусом `401 Unauthorized` во всех репликах сервиса в Kubernetes при горизонтальном масштабировании. Устаревшие записи автоматически удаляются из базы данных по истечении срока жизни токена (`exp`).
-   - **Криптографическая уникальность токенов (RFC 7519)**: Каждый создаваемый JWT снабжается уникальным идентификатором `jti` (`UUIDv4`) и временем выпуска `iat`, исключая коллизии токенов, сгенерированных в одну секунду, и защищая от Replay-атак.
-   - **Защита от XSS-кражи токенов (Zero LocalStorage)**: Фронтенд не сохраняет JWT-токен в `localStorage`. Основная сессия поддерживается через безопасные `HttpOnly` Cookie (`credentials: 'include'`), а для заголовков используется только оперативная память JS текущей вкладки.
-   - **Устранение утечки токенов в URL**: Потоки Server-Sent Events (`/queries/{query_id}/stream` и `/queries/notifications/stream`) используют сессионные `HttpOnly` Cookie (`withCredentials: true`), исключая передачу токена через query-параметры `?token=...` и его попадание в access-логи прокси-серверов.
-   - **CORS**: Заголовок `Access-Control-Allow-Origin` ограничен белым списком доменов из `settings.server.cors_origins` (или переменной `CORS_ORIGINS`).
-   - **Path Traversal Protection**: При раздаче статических файлов SPA путь проверяется через `os.path.commonpath`, исключая доступ к файлам вне директории сборки.
-   - **TLS/SSL Validation**: Проверка сертификатов координатора Trino и LDAPS-сервера включена по умолчанию (`ssl.CERT_REQUIRED`). Для тестовых сред предусмотрен явный флаг `allow_insecure_ssl: true`.
-   - **Сессионные Cookies**: Поддержка флага `secure=True` (через параметр `server.secure_cookies` или env `SECURE_COOKIES=true`) и `HttpOnly` для защиты от перехвата и XSS.
-   - **Fail-fast Startup Check**: При запуске в боевых режимах (`hybrid`, `ldaps_only`, `kerberos_only`) сервис проверяет секрет `jwt.secret_key` и аварийно завершает работу, если обнаружен дефолтный ключ.
-
-4. **Контейнерная безопасность (Non-root user)**:
-   - Dockerfile и Helm-чарт сконфигурированы для запуска процесса от имени непривилегированного пользователя `appuser` (`UID: 10001`, `GID: 10001`).
-
-5. **Корпоративный аудит безопасности (SIEM/SOC Audit Logging)**:
-   - В ядро системы встроен выделенный логгер `security.audit` ([audit.py](file:///Users/mvmalykh/IdeaProjects/sql-explorer/backend/app/core/audit.py)), выводящий события информационной безопасности в структурированном формате JSON:
-     - `AUTH_LOGIN_SUCCESS` — успешный вход (пользователь, IP, метод auth: LDAP/Kerberos/Mock, группы).
-     - `AUTH_LOGIN_FAILED` — неудачная попытка входа с указанием причины.
-     - `AUTH_RATE_LIMITED` — срабатывание лимитера перебора паролей.
-     - `AUTH_LOGOUT` — выход пользователя и отзыв токена.
-     - `QUERY_EXECUTED` — отправка SQL-запроса на исполнение (query_id, кластер, сниппет SQL, IP).
-     - `QUERY_CANCELLED` — отмена или удаление запроса из очереди.
-     - `ACCESS_DENIED_ACL` — попытка выполнения запроса к запрещенному кластеру.
-     - `ACCESS_DENIED_BOLA` — попытка несанкционированного перехвата чужого SSE-стрима или просмотра чужого кэша результатов.
-   - Логи готовы к прямой отправке в OpenSearch, ELK, Splunk, Kafka или Vector.
-
-### Рекомендации по безопасности для Production (Production Checklist)
-
-Перед развертыванием приложения в промышленную эксплуатацию выполните следующие шаги:
-
-- [ ] **Смена криптографических ключей**: Обязательно задайте уникальный криптостойкий ключ `JWT_SECRET_KEY` через переменные окружения или Kubernetes Secret:
-  ```bash
-  export JWT_SECRET_KEY="$(openssl rand -hex 32)"
-  ```
-- [ ] **Отключение Mock режима**: Установите `auth.mode: "hybrid"`, `"ldaps_only"` или `"kerberos_only"`. Никогда не используйте `"mock"` в боевом контуре (сработает Fail-fast проверка).
-- [ ] **Включение Secure Cookies**: Установите `server.secure_cookies: true` (или `SECURE_COOKIES=true`), чтобы сессионные куки передавались строго по HTTPS.
-- [ ] **Белый список CORS**: Задайте боевые домены в `server.cors_origins` (или `CORS_ORIGINS=https://sql-explorer.company.local`).
-- [ ] **Проверка сертификатов LDAPS**: Смонтируйте корневой сертификат УЦ компании (`ca_cert_file`) и убедитесь, что `allow_insecure_ssl: false`.
-- [ ] **Rate Limiting на уровне Ingress**: Помимо встроенного лимитера приложения, рекомендуется ограничить частоту запросов к `/api/auth/login` на уровне Ingress Controller (например, аннотации `limit-rps: "5"`), обеспечивая эшелонированную защиту.
-- [ ] **TLS-терминация**: Обеспечьте работу веб-портала строго по HTTPS с валидным SSL/TLS-сертификатом.
-
----
-
-## Настройка ACL (Контроль доступа)
-
-В файле `config/config.yaml` настраиваются права доступа:
-```yaml
-acl:
-  # Кто имеет право входа в UI
-  ui_access:
-    allowed_users: ["*"]
-    allowed_groups: ["bi-analysts", "data-engineers", "data-platform-admins"]
-    admin_groups: ["data-platform-admins"]
+  kerberos:
+    enabled: true
+    keytab_file: "/etc/security/keytabs/sql-explorer.keytab"
+    service_principal: "HTTP/sql-explorer.company.local@COMPANY.LOCAL"
 
 clusters:
   - id: "trino-analytics"
-    name: "Trino Analytics (Prod)"
+    name: "Production Trino Cluster"
     type: "trino"
+    host: "trino.company.local"
+    port: 8443
+    use_ssl: true
+    impersonation:
+      enabled: true
+      method: "x-trino-user"
     acl:
-      allowed_groups: ["bi-analysts", "data-engineers"]
-      allowed_users: []
+      allowed_groups: ["*"]
 
-  - id: "hive-hortonworks"
-    name: "Hive HDP Cluster"
+  - id: "hive-cdp"
+    name: "Cloudera CDP HiveServer2"
     type: "hive"
+    host: "hive.company.local"
+    port: 10000
+    auth:
+      type: "kerberos"
+      kerberos_service_name: "hive"
+    impersonation:
+      enabled: true
+      method: "doAs"
     acl:
-      allowed_groups: ["data-engineers"] # Только дата-инженеры
-      allowed_users: ["vip_analyst"]
+      allowed_groups: ["data-engineers"]
 ```
 
 ---
 
-## Быстрый старт и локальный запуск
+## ☸️ Развертывание в Kubernetes (Helm)
 
-### Режим разработки (Dev Mode)
+В каталог `helm/sql-explorer` включен готовый Helm-чарт со строгим харденингом безопасности:
+- Контейнер от непривилегированного пользователя (`UID 10001`, `readOnlyRootFilesystem`).
+- Сетевая изоляция через **NetworkPolicy** (только порты 8000, 53, 88, 636, Trino, Hive).
+- Автоматическая инициализация Kerberos-билета (`kinit`) через `docker-entrypoint.sh`.
+- PersistentVolumeClaim для сохранения истории запросов и черного списка токенов.
 
-#### 1. Запуск Backend
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python -m backend.app.main
+# Установка чарта
+helm upgrade --install sql-explorer ./helm/sql-explorer \
+  --namespace analytics \
+  --create-namespace \
+  -f custom-values.yaml
 ```
-Backend будет доступен по адресу: `http://localhost:8000`.
 
-#### 2. Запуск Frontend
+Подробное руководство по параметрам чарта см. в **[helm/sql-explorer/README.md](helm/sql-explorer/README.md)**.
+
+---
+
+## 🧪 Тестирование
+
+Запуск модульных и интеграционных тестов безопасности, API и движков:
+```bash
+# Запуск через pytest из корня проекта
+pytest
+
+# Запуск тестов внутри Docker-контейнера
+docker exec sql-demo-explorer pytest
+```
+
+Проверка типов и синтаксиса фронтенда:
 ```bash
 cd frontend
-npm install
-npm run dev
+npm run check
 ```
-Frontend откроется на `http://localhost:5173` с автоматическим проксированием запросов к бэкенду.
-
-В конфигурации по умолчанию включен режим `auth.mode: "mock"`, позволяющий сразу протестировать вход под разными ролями:
-- `analyst_user` / `password123` (группа `bi-analysts` — доступ к Trino и Apache Hive).
-- `de_user` / `password123` (группа `data-engineers` — доступ ко всем кластерам, включая Hortonworks HDP).
-- `admin_user` / `password123` (Администратор).
 
 ---
 
-## Развертывание в Kubernetes (Helm)
+## 📁 Структура проекта
 
-Для развертывания в Kubernetes подготовлен готовый Helm-чарт в директории `helm/sql-explorer`:
-
-```bash
-# Установка с базовыми параметрами
-helm install sql-explorer ./helm/sql-explorer -n analytics --create-namespace
 ```
-
-### Установка с Kerberos Keytab и внешним PostgreSQL:
-```bash
-helm upgrade --install sql-explorer ./helm/sql-explorer \
-  -n analytics \
-  --set image.repository="registry.company.local/analytics/sql-explorer" \
-  --set image.tag="0.1.0" \
-  --set config.database.url="postgresql+asyncpg://sql_user:sql_pass@postgres.analytics.svc:5432/sql_explorer" \
-  --set secrets.jwtSecret="SuperSecretKey123" \
-  --set secrets.ldapBindPassword="ServiceAccountPassword" \
-  --set secrets.kerberosKeytabBase64="$(base64 -w 0 /path/to/sql-explorer.keytab)" \
-  --set ingress.enabled=true \
-  --set ingress.hosts[0].host="sql-explorer.company.local"
+sql-explorer/
+├── backend/                     # Бэкенд FastAPI (см. backend/README.md)
+│   ├── app/
+│   │   ├── api/                 # REST API роутеры (auth, clusters, catalog, queries)
+│   │   ├── core/                # Конфигурация, безопасность, токены, LDAP, Kerberos
+│   │   ├── db/                  # Сессии SQLAlchemy, модели истории и сохраненных скриптов
+│   │   ├── models/              # Pydantic-схемы данных
+│   │   └── services/            # Движки выполнения (TrinoEngine, HiveEngine, QueryManager)
+│   ├── tests/                   # Автоматические тесты на pytest
+│   ├── docker-entrypoint.sh     # Инициализация Kerberos (kinit) и запуск сервиса
+│   ├── requirements.txt         # Зависимости Python
+│   └── README.md                # Документация бэкенда и API
+├── frontend/                    # Фронтенд Svelte 5 (см. frontend/README.md)
+│   ├── src/
+│   │   ├── components/          # UI-компоненты (Header, Sidebar, SqlEditor, ResultsGrid, QueueView)
+│   │   ├── api/                 # Клиентский HTTP и SSE сервис
+│   │   ├── utils/               # Парсер мульти-запросов и форматирование
+│   │   ├── App.svelte           # Главный компонент интерфейса
+│   │   └── types.ts             # TypeScript интерфейсы
+│   ├── package.json             # Зависимости и скрипты сборки
+│   ├── vite.config.ts           # Конфигурация Vite и dev-прокси
+│   └── README.md                # Документация фронтенда
+├── demo/                        # Полный демо-стенд (Docker Compose, Trino, Hive, Metastore, KDC, LDAP)
+│   ├── docker-compose.yaml     # Описание сервисов демо-стенда
+│   ├── start-demo.sh            # Скрипт быстрого запуска
+│   ├── stop-demo.sh             # Скрипт остановки и очистки
+│   └── config/                  # Конфигурационные файлы демо-режима
+├── helm/sql-explorer/           # Production Helm-чарт для развертывания в Kubernetes
+│   ├── Chart.yaml               # Описание и метаданные чарта
+│   ├── values.yaml              # Параметры по умолчанию
+│   ├── templates/               # Манифесты K8s (Deployment, Service, Ingress, PVC, NetworkPolicy)
+│   └── README.md                # Документация чарта и параметров values
+├── config/                      # Файлы конфигурации приложения (config.yaml)
+├── Dockerfile                   # Multi-stage Dockerfile SQL Explorer
+├── docker-compose.yml           # Базовый docker-compose сценарий
+├── pytest.ini                   # Конфигурация тестов pytest
+├── DEMO.md                      # Подробное руководство по демо-стенду
+└── README.md                    # Главная документация проекта
 ```
-
-Подробное руководство по параметрам чарта см. в [helm/sql-explorer/README.md](file:///Users/mvmalykh/IdeaProjects/sql-explorer/helm/sql-explorer/README.md).
 
 ---
 
-## Автономный демонстрационный стенд (Docker Compose)
+## 📄 Лицензия
 
-В проект включен полностью настроенный керберизированный демо-стенд (`demo/`):
-- **MIT Kerberos KDC** (Realm `COMPANY.LOCAL`, keytabs для Trino, Hive и Web-интерфейса).
-- **OpenLDAP** (пользователи `analyst_user`, `de_user`, `admin_user`).
-- **Trino Coordinator** с Kerberos и каталогами `tpch` и `hive`.
-- **Hive Metastore** на PostgreSQL + **HiveServer2** с поддержкой `doAs`.
-- **SQL Web Explorer** на порту **8002**.
-
-Запуск одной командой:
-```bash
-./demo/start-demo.sh
-```
-Веб-интерфейс будет доступен по адресу: 👉 **[http://localhost:8002](http://localhost:8002)**.  
-Подробная инструкция со сценариями тестирования — в [DEMO.md](file:///Users/mvmalykh/IdeaProjects/sql-explorer/DEMO.md).
-
----
-
-## Запуск в Docker
-
-Сборка и запуск единого контейнера (Frontend + Backend):
-```bash
-docker build -t sql-explorer:latest .
-docker run -d -p 8000:8000 -v $(pwd)/config:/app/config sql-explorer:latest
-```
-Интерфейс будет доступен в браузере: `http://localhost:8000`.
-
----
-
-## Возможности редактора и выполнение запросов
-
-- **Мульти-запросы**: В редакторе можно писать цепочки SQL-запросов, разделяя их точкой с запятой `;`.
-- **Запуск выделенного фрагмента**: Если в Monaco Editor выделить часть текста и нажать `Cmd+Enter` (или кнопку «Выполнить»), исполнится только выделенный SQL.
-- **Запрос под курсором**: Если выделения нет, автоматически находится и исполняется запрос под текущей позицией курсора.
-- **Горячие клавиши**:
-  - `Cmd+Enter` / `Ctrl+Enter` — запустить запрос.
-  - `Cmd+S` / `Ctrl+S` — сохранить запрос в избранное.
-  - `Cmd+F` / `Ctrl+F` — поиск и замена в редакторе кода.
-
----
-
-## Фоновая очередь задач и сохранение результатов
-
-1. **Независимое выполнение**: При запуске запрос регистрируется в очереди (`QUEUED` -> `RUNNING`). Пользователь может закрыть браузер, выключить компьютер или переключить вкладку — выполнение на кластере Trino/Hive продолжится на сервере.
-2. **Персистентное хранилище**: После завершения результат сохраняется в сжатом виде (`data/results/{query_id}.json.gz`).
-3. **Остановка и удаление из очереди**:
-   - В интерфейсе на вкладке **«Очередь»** доступна кнопка **«Остановить и удалить»** (`DELETE /api/queries/queue/{query_id}`).
-   - Если запрос еще исполняется на кластере, сервер немедленно посылает команду отмены (`cancel`) в координатор Trino/Hive, освобождает ресурсы и удаляет задачу из очереди.
-4. **Desktop Notifications**: Интеграция с браузерным Notification API оповещает о готовности результата даже при свернутом окне.
+Распространяется под лицензией Apache License 2.0.
