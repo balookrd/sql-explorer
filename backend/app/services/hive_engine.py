@@ -3,7 +3,7 @@ import re
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import anyio
 from impala.dbapi import connect as impala_connect
-from backend.app.core.config import ClusterConfig
+from backend.app.core.config import ClusterConfig, settings
 
 logger = logging.getLogger("hive_engine")
 
@@ -32,6 +32,7 @@ class HiveExecutionEngine:
         effective_user = user_login if self.cluster.impersonation.enabled else auth_cfg.get("user", user_login)
         password = auth_cfg.get("password", "")
         kerberos_service_name = auth_cfg.get("kerberos_service_name", "hive")
+        timeout_sec = auth_cfg.get("timeout") or settings.query_defaults.query_timeout_seconds
 
         conn = impala_connect(
             host=self.cluster.host,
@@ -41,7 +42,8 @@ class HiveExecutionEngine:
             password=password,
             kerberos_service_name=kerberos_service_name,
             use_ssl=self.cluster.use_ssl,
-            database=self.cluster.schema_ or "default"
+            database=self.cluster.schema_ or "default",
+            timeout=int(timeout_sec)
         )
         return conn
 

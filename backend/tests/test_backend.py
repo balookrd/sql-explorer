@@ -293,6 +293,23 @@ async def test_csrf_cookie_protection():
         assert resp_csrf.status_code == 403
         assert "CSRF protection" in resp_csrf.json()["detail"]
 
+        # Запрос с чужим Origin -> 403
+        resp_evil = await client.post(
+            "/api/queries/execute",
+            cookies={"access_token": token},
+            headers={"Origin": "http://evil-test.attacker.com"},
+            json={"cluster_id": "trino-analytics", "query": "SELECT 1;"}
+        )
+        assert resp_evil.status_code == 403
+
+        # Запрос без заголовков (проверка отсутствия Fail-Open) -> 403
+        resp_no_hdr = await client.post(
+            "/api/queries/execute",
+            cookies={"access_token": token},
+            json={"cluster_id": "trino-analytics", "query": "SELECT 1;"}
+        )
+        assert resp_no_hdr.status_code == 403
+
         # Легитимный запрос с X-Requested-With -> 200
         resp_ok = await client.post(
             "/api/queries/execute",
@@ -301,4 +318,188 @@ async def test_csrf_cookie_protection():
             json={"cluster_id": "trino-analytics", "query": "SELECT 1;"}
         )
         assert resp_ok.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_query_param_token_rejected():
+    """Проверка, что передача JWT-токена в query параметре (?token=...) больше не поддерживается."""
+    await init_db()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        login_res = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        token = login_res.json()["access_token"]
+
+        # Попытка получить доступ только через query param ?token=... (без cookie и без Bearer)
+        client.cookies.clear()
+        resp = await client.get(f"/api/auth/me?token={token}")
+        assert resp.status_code == 401
+
+        # Попытка через заголовок Bearer должна работать штатно
+        resp_bearer = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert resp_bearer.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_ip_spoofing_rate_limiting():
+    """Проверка, что X-Forwarded-For от недоверенных хостов не переопределяет IP-адрес для Rate Limiter."""
+    from backend.app.core.security import get_client_ip, is_trusted_proxy
+    from starlette.datastructures import Headers
+
+    class DummyClient:
+        def __init__(self, host: str):
+            self.host = host
+
+    class DummyRequest:
+        def __init__(self, client_host: str, headers: dict):
+            self.client = DummyClient(client_host)
+            self.headers = Headers(headers)
+
+    # 1. Запрос от недоверенного внешнего IP со спуфингом заголовка
+    req_untrusted = DummyRequest("198.51.100.55", {"x-forwarded-for": "10.0.0.1"})
+    assert get_client_ip(req_untrusted) == "198.51.100.55"
+
+    # 2. Запрос от доверенного локального прокси
+    req_trusted = DummyRequest("127.0.0.1", {"x-forwarded-for": "203.0.113.195, 127.0.0.1"})
+    assert get_client_ip(req_trusted) == "203.0.113.195"
+
+
+@pytest.mark.asyncio
+async def test_spnego_kerberos_ldap_enrichment(monkeypatch):
+    """Проверка обогащения групп пользователя через LDAP при Kerberos SPNEGO SSO."""
+    from unittest.mock import MagicMock
+    import backend.app.api.auth as auth_module
+
+    # Мокаем Kerberos валидацию
+    monkeypatch.setattr(auth_module, "authenticate_spnego", lambda token: {
+        "username": "sso_user",
+        "display_name": "sso_user",
+        "email": "sso_user@EXAMPLE.COM",
+        "groups": [],
+        "auth_method": "kerberos"
+    })
+
+    # Мокаем get_ldap_user_info
+    monkeypatch.setattr(auth_module, "get_ldap_user_info", lambda username: {
+        "username": username,
+        "display_name": "SSO Analyst",
+        "email": "sso_analyst@corp.com",
+        "groups": ["bi-analysts"],
+        "auth_method": "ldaps"
+    })
+
+    # Включаем LDAP в настройках
+    auth_module.settings.auth.ldap.enabled = True
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/auth/negotiate", headers={"Authorization": "Negotiate YWJjMTIz"})
+        assert resp.status_code == 200
+        user = resp.json()["user"]
+        assert user["username"] == "sso_user"
+        assert "bi-analysts" in user["groups"]
+        assert user["display_name"] == "SSO Analyst"
+
+
+@pytest.mark.asyncio
+async def test_mock_users_isolation_sql_explorer(monkeypatch):
+    """Проверка, что mock_users разрешены ТОЛЬКО при auth.mode == 'mock'."""
+    from backend.app.core.config import settings
+    import backend.app.api.auth as auth_mod
+    monkeypatch.setattr(auth_mod, "authenticate_ldap", lambda u, p: None)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. При mode == 'mock' вход успешен
+        monkeypatch.setattr(settings.auth, "mode", "mock")
+        resp = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        assert resp.status_code == 200
+
+        # 2. При mode == 'hybrid' mock-пользователи запрещены -> 401
+        monkeypatch.setattr(settings.auth, "mode", "hybrid")
+        resp_hybrid = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        assert resp_hybrid.status_code == 401
+
+        # 3. При mode == 'ldaps_only' mock-пользователи запрещены -> 401
+        monkeypatch.setattr(settings.auth, "mode", "ldaps_only")
+        resp_ldap = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        assert resp_ldap.status_code == 401
+
+
+def test_query_manager_limit_logic():
+    """Тестирование продвинутой санитизации LIMIT (подзапросы, комментарии, литералы)."""
+    from backend.app.services.query_manager import QueryManager
+    from backend.app.core.config import settings
+
+    qm = QueryManager()
+    default_limit = settings.query_defaults.default_limit
+
+    # 1. Однострочный комментарий с 'limit' не должен препятствовать добавлению основного LIMIT
+    q1 = "SELECT * FROM my_table -- limit 10"
+    res1 = qm._sanitize_and_limit_query(q1)
+    assert f"LIMIT {default_limit}" in res1
+
+    # 2. Многострочный комментарий с 'limit' не блокирует добавление LIMIT
+    q2 = "/* limit 5 */ SELECT id, name FROM users"
+    res2 = qm._sanitize_and_limit_query(q2)
+    assert f"LIMIT {default_limit}" in res2
+
+    # 3. Подзапрос со своим LIMIT не должен блокировать добавление LIMIT к основному запросу
+    q3 = "SELECT * FROM (SELECT id FROM accounts LIMIT 5) sub"
+    res3 = qm._sanitize_and_limit_query(q3)
+    assert res3.endswith(f"\nLIMIT {default_limit}")
+
+    # 4. CTE со своим LIMIT не должен блокировать добавление LIMIT к основному запросу
+    q4 = "WITH filtered AS (SELECT * FROM orders LIMIT 20) SELECT * FROM filtered"
+    res4 = qm._sanitize_and_limit_query(q4)
+    assert res4.endswith(f"\nLIMIT {default_limit}")
+
+    # 5. Если LIMIT уже есть на верхнем уровне, новый не добавляется
+    q5 = "SELECT * FROM items LIMIT 50"
+    res5 = qm._sanitize_and_limit_query(q5)
+    assert res5 == "SELECT * FROM items LIMIT 50"
+
+    # 6. Строковый литерал с текстом 'limit 100' не считается ключевым словом LIMIT
+    q6 = "SELECT 'limit 100' AS description FROM products"
+    res6 = qm._sanitize_and_limit_query(q6)
+    assert res6.endswith(f"\nLIMIT {default_limit}")
+
+
+def test_engines_timeout_passing(monkeypatch):
+    """Проверка передачи query_timeout_seconds в сетевые подключения Hive и Trino."""
+    from backend.app.services.hive_engine import HiveExecutionEngine
+    from backend.app.services.trino_engine import TrinoExecutionEngine
+    from backend.app.core.config import ClusterConfig, settings
+
+    monkeypatch.setattr(settings.query_defaults, "query_timeout_seconds", 300)
+
+    # Hive engine
+    cluster_hive = ClusterConfig(id="hive1", name="Hive 1", type="hive", host="localhost", port=10000)
+    hive_engine = HiveExecutionEngine(cluster_hive)
+    captured_hive_kwargs = {}
+
+    def fake_impala_connect(**kwargs):
+        captured_hive_kwargs.update(kwargs)
+        return None
+
+    import backend.app.services.hive_engine as he_mod
+    monkeypatch.setattr(he_mod, "impala_connect", fake_impala_connect)
+    hive_engine._get_connection("test_user")
+    assert captured_hive_kwargs.get("timeout") == 300
+
+    # Trino engine
+    cluster_trino = ClusterConfig(id="trino1", name="Trino 1", type="trino", host="localhost", port=8080)
+    trino_engine = TrinoExecutionEngine(cluster_trino)
+    captured_trino_kwargs = {}
+
+    def fake_trino_connect(**kwargs):
+        captured_trino_kwargs.update(kwargs)
+        return None
+
+    import trino.dbapi
+    monkeypatch.setattr(trino.dbapi, "connect", fake_trino_connect)
+    trino_engine._get_connection("test_user")
+    assert captured_trino_kwargs.get("request_timeout") == 300.0
+
+
+
 

@@ -1,5 +1,6 @@
 import uuid
 import datetime
+import ipaddress
 from typing import Optional, List
 from pydantic import BaseModel
 import jwt
@@ -9,42 +10,106 @@ from backend.app.core.config import settings
 
 security_bearer = HTTPBearer(auto_error=False)
 
+TRUSTED_PROXIES = {"127.0.0.1", "::1", "localhost", "testclient"}
+
+def is_trusted_proxy(host: str) -> bool:
+    if host in TRUSTED_PROXIES:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_loopback
+    except ValueError:
+        return False
+
+def get_client_ip(request: Request) -> str:
+    """
+    Безопасное определение IP-адреса клиента с защитой от IP Spoofing (CWE-348 / CWE-290).
+    X-Forwarded-For считывается только если непосредственный request.client.host является доверенным прокси.
+    """
+    if not request.client or not request.client.host:
+        return "unknown"
+    
+    direct_ip = request.client.host
+    if is_trusted_proxy(direct_ip):
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
+            if ips:
+                return ips[0]
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+            
+    return direct_ip
+
+from urllib.parse import urlparse
+
+def _is_allowed_origin(url_str: str, request: Request, allowed_cors: list[str]) -> bool:
+    if not url_str:
+        return False
+    try:
+        parsed = urlparse(url_str)
+        if not parsed.scheme or not parsed.netloc:
+            return False
+        if parsed.scheme.lower() not in ("http", "https"):
+            return False
+
+        target_origin = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}".rstrip("/")
+        target_netloc = parsed.netloc.lower()
+
+        for allowed in allowed_cors:
+            if allowed == "*":
+                return True
+            p_allowed = urlparse(allowed)
+            if p_allowed.netloc:
+                if f"{p_allowed.scheme.lower()}://{p_allowed.netloc.lower()}".rstrip("/") == target_origin:
+                    return True
+            elif allowed.rstrip("/").lower() == target_origin:
+                return True
+
+        req_host = request.headers.get("host", "").lower()
+        if req_host and target_netloc == req_host:
+            return True
+
+        base_netloc = request.base_url.netloc.lower()
+        if base_netloc and target_netloc == base_netloc:
+            return True
+
+        base_url_str = str(request.base_url).rstrip("/").lower()
+        if target_origin == base_url_str:
+            return True
+
+        return False
+    except Exception:
+        return False
+
 def verify_csrf(request: Request, is_cookie_auth: bool):
     """
     Защита от Cross-Site Request Forgery (CWE-352).
     Если запрос аутентифицирован через Cookie и изменяет состояние (POST, PUT, DELETE, PATCH),
-    требуется подтверждение легитимности источника (Sec-Fetch-Site, Origin, X-Requested-With).
+    требуется подтверждение легитимности источника (Sec-Fetch-Site, Origin, Referer, X-Requested-With).
     """
     if not is_cookie_auth:
         return
 
     if request.method in ("POST", "PUT", "DELETE", "PATCH"):
         sec_fetch_site = request.headers.get("Sec-Fetch-Site")
-        if sec_fetch_site in ("cross-site",):
+        if sec_fetch_site and sec_fetch_site.lower() == "cross-site":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="CSRF protection: межсайтовый запрос отклонен (Sec-Fetch-Site: cross-site)"
             )
 
-        origin = request.headers.get("Origin")
-        referer = request.headers.get("Referer")
         x_requested_with = request.headers.get("X-Requested-With")
-
         if x_requested_with == "XMLHttpRequest":
             return
 
-        if origin:
-            allowed = set(settings.server.cors_origins)
-            host = request.headers.get("Host", "")
-            if origin in allowed or any(origin.endswith(f"://{host}") or f"://{host}" in origin for _ in [1]):
-                return
+        origin = request.headers.get("Origin")
+        if origin and _is_allowed_origin(origin, request, settings.server.cors_origins):
+            return
 
-        if referer:
-            host = request.headers.get("Host", "")
-            if f"://{host}/" in referer or referer.endswith(f"://{host}"):
-                return
-
-        if not (origin or referer or x_requested_with):
+        referer = request.headers.get("Referer")
+        if referer and _is_allowed_origin(referer, request, settings.server.cors_origins):
             return
 
         raise HTTPException(
@@ -196,13 +261,10 @@ async def get_current_user(
     # 1. Сначала проверяем Bearer заголовок
     if auth_header and auth_header.credentials:
         token = auth_header.credentials
-    # 2. Либо Cookie сессии (удобно для EventSource/SSE и браузера)
+    # 2. Либо Cookie сессии (удобно для браузера)
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
         is_cookie_auth = True
-    # 3. Либо query параметр token (для обратной совместимости)
-    elif "token" in request.query_params:
-        token = request.query_params.get("token")
 
     if not token:
         raise HTTPException(

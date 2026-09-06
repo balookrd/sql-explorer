@@ -89,12 +89,96 @@ class QueryManager:
 
     def _sanitize_and_limit_query(self, query: str) -> str:
         trimmed = query.strip().rstrip(";")
-        if settings.query_defaults.auto_add_limit:
-            # Добавляем LIMIT только к операторам выборки данных (SELECT / WITH)
-            if re.match(r"^\s*(select|with)\b", trimmed, re.IGNORECASE):
-                if not re.search(r"\blimit\s+\d+\b", trimmed, re.IGNORECASE):
-                    trimmed = f"{trimmed}\nLIMIT {settings.query_defaults.default_limit}"
+        if not settings.query_defaults.auto_add_limit:
+            return trimmed
+
+        # Очищаем комментарии и строковые литералы для синтаксического анализа структуры
+        cleaned = self._strip_comments_and_strings(trimmed)
+        cleaned_stripped = cleaned.strip()
+
+        # Добавляем LIMIT только к операторам выборки данных (SELECT / WITH)
+        if not re.match(r"^(select|with)\b", cleaned_stripped, re.IGNORECASE):
+            return trimmed
+
+        # Проверяем наличие LIMIT на верхнем уровне запроса (вне круглых скобок подзапросов и CTE)
+        if not self._has_top_level_limit(cleaned):
+            trimmed = f"{trimmed}\nLIMIT {settings.query_defaults.default_limit}"
         return trimmed
+
+    @staticmethod
+    def _strip_comments_and_strings(sql: str) -> str:
+        """
+        Заменяет комментарии (-- и /* */) и строковые литералы ('...', "...") на пробелы,
+        сохраняя скобки и ключевые слова запроса.
+        """
+        result = []
+        i = 0
+        n = len(sql)
+        while i < n:
+            # Строковые литералы с одинарными кавычками '...'
+            if sql[i] == "'":
+                result.append(' ')
+                i += 1
+                while i < n:
+                    if sql[i] == "'":
+                        if i + 1 < n and sql[i + 1] == "'":
+                            i += 2
+                            continue
+                        else:
+                            result.append(' ')
+                            i += 1
+                            break
+                    i += 1
+            # Строковые литералы с двойными кавычками "..."
+            elif sql[i] == '"':
+                result.append(' ')
+                i += 1
+                while i < n:
+                    if sql[i] == '"':
+                        if i + 1 < n and sql[i + 1] == '"':
+                            i += 2
+                            continue
+                        else:
+                            result.append(' ')
+                            i += 1
+                            break
+                    i += 1
+            # Однострочные комментарии -- ...
+            elif sql[i:i+2] == "--":
+                i += 2
+                while i < n and sql[i] not in ('\r', '\n'):
+                    i += 1
+                result.append('\n')
+            # Многострочные комментарии /* ... */
+            elif sql[i:i+2] == "/*":
+                i += 2
+                while i < n and sql[i:i+2] != "*/":
+                    i += 1
+                i += 2
+                result.append(' ')
+            else:
+                result.append(sql[i])
+                i += 1
+        return "".join(result)
+
+    @staticmethod
+    def _has_top_level_limit(cleaned_sql: str) -> bool:
+        """
+        Проверяет наличие предложения LIMIT на нулевом уровне вложенности скобок.
+        """
+        top_level_chars = []
+        depth = 0
+        for char in cleaned_sql:
+            if char == '(':
+                depth += 1
+                top_level_chars.append(' ')
+            elif char == ')':
+                depth = max(0, depth - 1)
+                top_level_chars.append(' ')
+            else:
+                top_level_chars.append(char if depth == 0 else ' ')
+        top_level_str = "".join(top_level_chars)
+        return bool(re.search(r"\blimit\s+\d+\b", top_level_str, re.IGNORECASE))
 
     def _get_result_path(self, query_id: str) -> str:
         return os.path.join(RESULTS_DIR, f"{query_id}.json.gz")

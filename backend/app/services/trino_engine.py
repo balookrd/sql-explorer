@@ -4,7 +4,7 @@ from typing import AsyncGenerator, Dict, Any, List, Optional
 import anyio
 import trino
 from trino.auth import BasicAuthentication, KerberosAuthentication
-from backend.app.core.config import ClusterConfig
+from backend.app.core.config import ClusterConfig, settings
 
 logger = logging.getLogger("trino_engine")
 
@@ -48,6 +48,7 @@ class TrinoExecutionEngine:
             target_user = user_login
 
         verify_ssl = auth_cfg.get("verify_ssl", True if self.cluster.use_ssl else False)
+        timeout_sec = auth_cfg.get("timeout") or settings.query_defaults.query_timeout_seconds
 
         conn = trino.dbapi.connect(
             host=self.cluster.host,
@@ -58,7 +59,8 @@ class TrinoExecutionEngine:
             http_scheme="https" if self.cluster.use_ssl else "http",
             auth=auth_handler,
             http_headers=http_headers,
-            verify=verify_ssl
+            verify=verify_ssl,
+            request_timeout=float(timeout_sec)
         )
         return conn
 

@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.config import settings
-from backend.app.core.security import get_current_user, UserSession
+from backend.app.core.security import get_current_user, get_client_ip, UserSession
 from backend.app.core.acl import check_cluster_access
 from backend.app.core.audit import log_audit_event, AuditEventType
 from backend.app.db.session import get_db
@@ -62,7 +62,7 @@ async def execute_query(
     request: Request,
     current_user: UserSession = Depends(get_current_user)
 ):
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Запрос не может быть пустым")
 
@@ -129,7 +129,7 @@ async def remove_from_queue(
     """
     Останавливает выполняющийся запрос и удаляет его из очереди задач.
     """
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     success = await query_manager.remove_and_cancel_from_queue(query_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Запрос не найден в очереди или нет прав на удаление")
@@ -155,7 +155,7 @@ async def get_query_result(
     """
     Возвращает сохраненный на сервере результат выполнения запроса даже после закрытия вкладки.
     """
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     stmt = select(QueryHistory).where(QueryHistory.id == query_id)
     res = await db.execute(stmt)
     record = res.scalar_one_or_none()
@@ -188,7 +188,7 @@ async def stream_query_results(
     """
     Server-Sent Events (SSE) стриминг статуса конкретного запроса.
     """
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     try:
         queue = query_manager.subscribe(query_id, user=current_user)
     except PermissionError:
@@ -264,7 +264,7 @@ async def cancel_query(
     request: Request,
     current_user: UserSession = Depends(get_current_user)
 ):
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     success = await query_manager.remove_and_cancel_from_queue(query_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Запрос не найден среди активных")

@@ -6,12 +6,13 @@ from backend.app.core.security import (
     create_access_token,
     decode_access_token,
     get_current_user,
+    get_client_ip,
     UserSession,
     revoke_token_in_db,
     login_rate_limiter
 )
 from backend.app.core.acl import check_ui_access
-from backend.app.core.ldap_auth import authenticate_ldap
+from backend.app.core.ldap_auth import authenticate_ldap, get_ldap_user_info
 from backend.app.core.kerberos_auth import authenticate_spnego
 from backend.app.core.audit import log_audit_event, AuditEventType
 
@@ -28,7 +29,7 @@ class AuthResponse(BaseModel):
 
 @router.post("/login", response_model=AuthResponse)
 async def login(req: LoginRequest, request: Request, response: Response):
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     rate_key = f"{client_ip}:{req.username}"
     try:
         login_rate_limiter.check_rate_limit(rate_key)
@@ -45,8 +46,8 @@ async def login(req: LoginRequest, request: Request, response: Response):
 
     user_info = None
 
-    # 1. Проверяем mock_users если включен mock режим
-    if settings.auth.mode in ("mock", "hybrid"):
+    # 1. Проверяем mock_users ТОЛЬКО если режим аутентификации строго равен 'mock'
+    if settings.auth.mode == "mock":
         for m in settings.auth.mock_users:
             if m.username == req.username and m.password == req.password:
                 user_info = {
@@ -58,8 +59,8 @@ async def login(req: LoginRequest, request: Request, response: Response):
                 }
                 break
 
-    # 2. Если не найден в mock и включен LDAP, проверяем через LDAPS
-    if not user_info and settings.auth.ldap.enabled and settings.auth.mode in ("hybrid", "ldaps_only"):
+    # 2. В режимах hybrid и ldaps_only аутентификация выполняется через LDAP (mock-пользователи строго запрещены)
+    elif settings.auth.mode in ("hybrid", "ldaps_only") and settings.auth.ldap.enabled:
         user_info = authenticate_ldap(req.username, req.password)
 
     if not user_info:
@@ -159,14 +160,28 @@ async def kerberos_negotiate(request: Request, response: Response):
             detail="Ошибка валидации Kerberos билета"
         )
 
+    groups = user_info.get("groups", [])
+    display_name = user_info.get("display_name", user_info["username"])
+    email = user_info.get("email")
+
+    # Если включен LDAP, обогащаем группы и профиль пользователя из каталога
+    if settings.auth.ldap.enabled:
+        ldap_info = get_ldap_user_info(user_info["username"])
+        if ldap_info:
+            groups = ldap_info.get("groups", groups)
+            if ldap_info.get("display_name"):
+                display_name = ldap_info.get("display_name")
+            if ldap_info.get("email"):
+                email = ldap_info.get("email")
+
     admin_groups = set(settings.acl.ui_access.admin_groups)
-    is_admin = bool(set(user_info["groups"]) & admin_groups)
+    is_admin = bool(set(groups) & admin_groups)
 
     session_user = UserSession(
         username=user_info["username"],
-        display_name=user_info.get("display_name", user_info["username"]),
-        email=user_info.get("email"),
-        groups=user_info.get("groups", []),
+        display_name=display_name,
+        email=email,
+        groups=groups,
         is_admin=is_admin,
         auth_method="kerberos"
     )
@@ -197,7 +212,7 @@ async def kerberos_negotiate(request: Request, response: Response):
     if user_info.get("out_token"):
         response.headers["WWW-Authenticate"] = f"Negotiate {user_info['out_token']}"
 
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     log_audit_event(
         AuditEventType.AUTH_LOGIN_SUCCESS,
         username=session_user.username,
@@ -220,10 +235,8 @@ async def logout(request: Request, response: Response):
         token = auth_header[7:].strip()
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
-    elif "token" in request.query_params:
-        token = request.query_params.get("token")
 
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     if token:
         payload = decode_access_token(token)
         username = payload.get("sub", "unknown") if payload else "unknown"
