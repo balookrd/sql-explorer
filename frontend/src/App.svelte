@@ -8,7 +8,10 @@
   import QueryToolbar from './components/QueryToolbar.svelte';
   import ResultsGrid from './components/ResultsGrid.svelte';
   import LoginModal from './components/LoginModal.svelte';
+  import AIAssistantModal from './components/AIAssistantModal.svelte';
+  import type { AIIssue } from './types';
   import { Plus, X, Terminal, Bell } from 'lucide-svelte';
+
 
   interface Tab {
     id: string;
@@ -55,6 +58,12 @@
 
   let editorHeightPercent = $state(45);
   let runEditorTrigger: (() => void) | null = $state(null);
+  let sqlEditorRef: any = $state(null);
+
+  // Состояние ИИ-ассистента
+  let isAiModalOpen = $state(false);
+  let aiInitialTab = $state<'check' | 'explain' | 'optimize' | 'fix'>('check');
+
 
   onMount(async () => {
     // Запрос разрешения на браузерные системные уведомления
@@ -289,6 +298,46 @@
       alert(`Ошибка: ${err.message}`);
     }
   }
+
+  // Обработчики ИИ-ассистента
+  function handleOpenAi(tab: 'check' | 'explain' | 'optimize' | 'fix' = 'check') {
+    aiInitialTab = tab;
+    isAiModalOpen = true;
+  }
+
+  function handleApplyAiSql(newSql: string) {
+    if (activeTab) {
+      activeTab.query = newSql;
+    }
+  }
+
+  function handleHighlightIssues(issues: AIIssue[]) {
+    if (sqlEditorRef && sqlEditorRef.setAiMarkers) {
+      sqlEditorRef.setAiMarkers(issues);
+    }
+  }
+
+  function handleNavigateToLine(line: number) {
+    if (sqlEditorRef && sqlEditorRef.revealLine) {
+      sqlEditorRef.revealLine(line);
+    }
+  }
+
+  async function handleFormatSql() {
+    if (!activeTab || !activeTab.query.trim()) return;
+    try {
+      const res = await api.formatSql(activeTab.query, selectedClusterId, currentCluster?.type);
+      if (res && res.formatted_sql) {
+        activeTab.query = res.formatted_sql;
+      }
+    } catch (err: any) {
+      console.error('Ошибка форматирования SQL:', err);
+    }
+  }
+
+  const currentCluster = $derived(
+    clusters.find((c) => c.id === selectedClusterId) || clusters[0]
+  );
 </script>
 
 <div class="h-screen w-screen flex flex-col bg-slate-50 text-slate-800 font-sans overflow-hidden">
@@ -351,10 +400,13 @@
           }}
           onCancel={cancelQuery}
           onSave={handleSaveQuery}
+          onOpenAi={handleOpenAi}
+          onFormat={handleFormatSql}
         />
 
         <div style="height: {editorHeightPercent}%" class="w-full shrink-0 border-b border-slate-200 overflow-hidden bg-white">
           <SqlEditor
+            bind:this={sqlEditorRef}
             bind:value={activeTab.query}
             onExecute={(q) => executeQuery(q)}
             registerTrigger={(fn) => { runEditorTrigger = fn; }}
@@ -367,6 +419,7 @@
             rows={activeTab.rows}
             errorMessage={activeTab.errorMessage}
             totalRows={activeTab.totalRows}
+            onFixWithAi={() => handleOpenAi('fix')}
           />
         </div>
       {/if}
@@ -376,4 +429,17 @@
   {#if !user}
     <LoginModal onLoginSuccess={handleLoginSuccess} />
   {/if}
+
+  <AIAssistantModal
+    bind:isOpen={isAiModalOpen}
+    initialTab={aiInitialTab}
+    sqlQuery={activeTab ? activeTab.query : ''}
+    clusterId={selectedClusterId}
+    engineType={currentCluster ? currentCluster.type : 'trino'}
+    errorMessage={activeTab?.errorMessage || ''}
+    onApplySql={handleApplyAiSql}
+    onHighlightIssues={handleHighlightIssues}
+    onNavigateToLine={handleNavigateToLine}
+  />
 </div>
+

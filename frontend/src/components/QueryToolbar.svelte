@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Play, Square, Save, Sparkles, Clock, Layers } from 'lucide-svelte';
+  import { Play, Square, Save, Sparkles, Clock, Layers, ShieldCheck, Zap, BookOpen, AlignLeft } from 'lucide-svelte';
 
   let {
     isRunning,
@@ -8,7 +8,9 @@
     rowsCount,
     onRun,
     onCancel,
-    onSave
+    onSave,
+    onOpenAi,
+    onFormat
   }: {
     isRunning: boolean;
     statusText: string;
@@ -17,6 +19,8 @@
     onRun: () => void;
     onCancel: () => void;
     onSave: () => void;
+    onOpenAi?: (tab: 'check' | 'explain' | 'optimize') => void;
+    onFormat?: () => void;
   } = $props();
 </script>
 
@@ -52,7 +56,54 @@
       <Save class="w-3.5 h-3.5 text-slate-500" />
       <span class="hidden sm:inline">Сохранить</span>
     </button>
+
+    {#if onFormat}
+      <button
+        onclick={onFormat}
+        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200 transition cursor-pointer shadow-2xs"
+        title="Автоматически отформатировать SQL (выравнивание, отступы, регистр)"
+      >
+        <AlignLeft class="w-3.5 h-3.5 text-slate-500" />
+        <span class="hidden sm:inline">Формат</span>
+      </button>
+    {/if}
+
+    <div class="h-4 w-px bg-slate-200 mx-1"></div>
+
+    <!-- Кнопки ИИ Ассистента -->
+    {#if onOpenAi}
+      <div class="flex items-center gap-1">
+        <button
+          onclick={() => onOpenAi && onOpenAi('check')}
+          class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 text-xs font-medium transition cursor-pointer shadow-2xs"
+          title="Проверить SQL на ошибки, антипаттерны и деструктивные операции"
+        >
+          <Sparkles class="w-3.5 h-3.5 text-indigo-600" />
+          <span>ИИ Анализ</span>
+        </button>
+
+        <button
+          onclick={() => onOpenAi && onOpenAi('explain')}
+          class="hidden md:flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium transition cursor-pointer"
+          title="Объяснить логику SQL запроса"
+        >
+          <BookOpen class="w-3.5 h-3.5 text-slate-500" />
+          <span>Объяснить</span>
+        </button>
+
+        <button
+          onclick={() => onOpenAi && onOpenAi('optimize')}
+          class="hidden md:flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium transition cursor-pointer"
+          title="Оптимизировать производительность SQL"
+        >
+          <Zap class="w-3.5 h-3.5 text-slate-500" />
+          <span>Оптимизировать</span>
+        </button>
+      </div>
+    {/if}
+
   </div>
+
 
   <!-- Правая группа статусов и метрик -->
   <div class="flex items-center gap-3 text-xs">

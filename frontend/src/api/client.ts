@@ -1,4 +1,17 @@
-import type { UserSession, ClusterSummary, QueryHistoryItem, SavedQueryItem, ColumnMeta, CachedResultResponse } from '../types';
+import type {
+  UserSession,
+  ClusterSummary,
+  QueryHistoryItem,
+  SavedQueryItem,
+  ColumnMeta,
+  CachedResultResponse,
+  AICheckResponse,
+  AIExplainResponse,
+  AIOptimizeResponse,
+  AIFixResponse,
+  AIFormatResponse,
+  AIStatusResponse
+} from '../types';
 
 const API_BASE = '/api';
 
@@ -181,6 +194,72 @@ class ApiClient {
       eventSource.close();
     };
   }
+
+  // --- Методы ИИ-ассистента ---
+
+  async getAiStatus(): Promise<AIStatusResponse> {
+    return this.request<AIStatusResponse>('/ai/status');
+  }
+
+  async checkSql(sql: string, clusterId?: string, dialect?: string, catalogContext?: any): Promise<AICheckResponse> {
+    return this.request<AICheckResponse>('/ai/check', {
+      method: 'POST',
+      body: JSON.stringify({
+        sql,
+        cluster_id: clusterId,
+        dialect,
+        catalog_context: catalogContext
+      })
+    });
+  }
+
+  async explainSql(sql: string, clusterId?: string, dialect?: string): Promise<AIExplainResponse> {
+    return this.request<AIExplainResponse>('/ai/explain', {
+      method: 'POST',
+      body: JSON.stringify({
+        sql,
+        cluster_id: clusterId,
+        dialect
+      })
+    });
+  }
+
+  async optimizeSql(sql: string, clusterId?: string, dialect?: string, catalogContext?: any): Promise<AIOptimizeResponse> {
+    return this.request<AIOptimizeResponse>('/ai/optimize', {
+      method: 'POST',
+      body: JSON.stringify({
+        sql,
+        cluster_id: clusterId,
+        dialect,
+        catalog_context: catalogContext
+      })
+    });
+  }
+
+  async fixSql(sql: string, errorMessage: string, clusterId?: string, dialect?: string): Promise<AIFixResponse> {
+    return this.request<AIFixResponse>('/ai/fix', {
+      method: 'POST',
+      body: JSON.stringify({
+        sql,
+        error_message: errorMessage,
+        cluster_id: clusterId,
+        dialect
+      })
+    });
+  }
+
+  async formatSql(sql: string, clusterId?: string, dialect?: string): Promise<AIFormatResponse> {
+    return this.request<AIFormatResponse>('/ai/format', {
+      method: 'POST',
+      body: JSON.stringify({
+        sql,
+        cluster_id: clusterId,
+        dialect
+      })
+    });
+  }
 }
 
 export const api = new ApiClient();
+
+

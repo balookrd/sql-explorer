@@ -58,3 +58,75 @@ export interface SavedQueryItem {
   is_shared: boolean;
   created_at: string;
 }
+
+export interface AIIssue {
+  line: number;
+  column: number;
+  end_line?: number;
+  end_column?: number;
+  severity: 'error' | 'warning' | 'info';
+  category: 'syntax' | 'performance' | 'schema' | 'security' | 'dialect';
+  message: string;
+  rule: string;
+  suggestion?: string;
+}
+
+export interface AICheckResponse {
+  is_valid: boolean;
+  issues: AIIssue[];
+  summary: string;
+  complexity_score?: number;
+  complexity_level?: string;
+  estimated_notes?: string[];
+  model: string;
+  provider: string;
+  execution_time_ms: number;
+  fallback_used: boolean;
+}
+
+export interface AIExplainResponse {
+  explanation: string;
+  summary: string;
+  tables_used: string[];
+  operations: string[];
+  model: string;
+  provider: string;
+  execution_time_ms: number;
+}
+
+export interface AIOptimizeResponse {
+  original_sql: string;
+  optimized_sql: string;
+  optimizations: string[];
+  diff_summary: string;
+  model: string;
+  provider: string;
+  execution_time_ms: number;
+}
+
+export interface AIFixResponse {
+  original_sql: string;
+  fixed_sql: string;
+  explanation: string;
+  model: string;
+  provider: string;
+  execution_time_ms: number;
+}
+
+export interface AIFormatResponse {
+  original_sql: string;
+  formatted_sql: string;
+  dialect: string;
+}
+
+export interface AIStatusResponse {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  base_url: string;
+  available: boolean;
+  message: string;
+  latency_ms?: number;
+}
+
+

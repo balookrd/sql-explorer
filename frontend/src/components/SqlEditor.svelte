@@ -71,6 +71,11 @@
     editorInstance.onDidChangeModelContent(() => {
       if (editorInstance) {
         value = editorInstance.getValue();
+        // Очищаем старые маркеры при редактировании
+        const model = editorInstance.getModel();
+        if (model) {
+          monaco.editor.setModelMarkers(model, 'ai-sql-linter', []);
+        }
       }
     });
 
@@ -84,7 +89,50 @@
     }
   });
 
+  export function setAiMarkers(issues: any[]) {
+    if (!editorInstance) return;
+    const model = editorInstance.getModel();
+    if (!model) return;
+
+    const markers: monaco.editor.IMarkerData[] = issues.map((issue) => {
+      let severity = monaco.MarkerSeverity.Warning;
+      if (issue.severity === 'error') severity = monaco.MarkerSeverity.Error;
+      else if (issue.severity === 'info') severity = monaco.MarkerSeverity.Info;
+
+      const lineContent = model.getLineContent(Math.min(issue.line, model.getLineCount())) || '';
+      const maxCol = Math.max(lineContent.length + 1, 2);
+
+      return {
+        severity,
+        startLineNumber: Math.min(issue.line, model.getLineCount()),
+        startColumn: Math.min(issue.column || 1, maxCol),
+        endLineNumber: Math.min(issue.end_line || issue.line, model.getLineCount()),
+        endColumn: Math.min(issue.end_column || maxCol, maxCol),
+        message: `[AI ${issue.category ? issue.category.toUpperCase() : 'LINTER'}] ${issue.message}${issue.suggestion ? '\n💡 Рекомендация: ' + issue.suggestion : ''}`,
+        source: 'AI SQL Assistant'
+      };
+    });
+
+    monaco.editor.setModelMarkers(model, 'ai-sql-linter', markers);
+  }
+
+  export function clearAiMarkers() {
+    if (!editorInstance) return;
+    const model = editorInstance.getModel();
+    if (model) {
+      monaco.editor.setModelMarkers(model, 'ai-sql-linter', []);
+    }
+  }
+
+  export function revealLine(lineNumber: number) {
+    if (!editorInstance) return;
+    editorInstance.revealLineInCenter(lineNumber);
+    editorInstance.setPosition({ lineNumber, column: 1 });
+    editorInstance.focus();
+  }
+
   export function triggerExecution() {
+
     if (!editorInstance) return;
     const model = editorInstance.getModel();
     if (!model) return;

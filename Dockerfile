@@ -22,7 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsasl2-dev \
     libsasl2-modules-gssapi-mit \
     krb5-user \
+    ldap-utils \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

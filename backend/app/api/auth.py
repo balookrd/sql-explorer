@@ -13,7 +13,7 @@ from backend.app.core.security import (
 )
 from backend.app.core.acl import check_ui_access
 from backend.app.core.ldap_auth import authenticate_ldap, get_ldap_user_info
-from backend.app.core.kerberos_auth import authenticate_spnego
+from backend.app.core.kerberos import authenticate_spnego
 from backend.app.core.audit import log_audit_event, AuditEventType
 
 router = APIRouter(prefix="/auth", tags=["auth"])

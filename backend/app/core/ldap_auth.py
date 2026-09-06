@@ -39,7 +39,9 @@ def authenticate_ldap(username: str, password: str) -> Optional[Dict[str, Any]]:
             # 3. Поиск пользователя по логину с защитой от LDAP Injection
             escaped_username = escape_filter_chars(username)
             search_filter = cfg.user_filter.format(username=escaped_username)
-            attributes = [cfg.user_display_name_attr, cfg.user_email_attr, "memberOf", "dn"]
+            attributes = [cfg.user_display_name_attr, cfg.user_email_attr]
+            if conn.server.schema and any(k.lower() == "memberof" for k in conn.server.schema.attribute_types.keys()):
+                attributes.append("memberOf")
             
             conn.search(
                 search_base=cfg.user_base_dn,
@@ -132,7 +134,9 @@ def get_ldap_user_info(username: str) -> Optional[Dict[str, Any]]:
         with Connection(server, user=bind_user, password=bind_pwd, auto_bind=True) as conn:
             escaped_username = escape_filter_chars(username)
             search_filter = cfg.user_filter.format(username=escaped_username)
-            attributes = [cfg.user_display_name_attr, cfg.user_email_attr, "memberOf", "dn"]
+            attributes = [cfg.user_display_name_attr, cfg.user_email_attr]
+            if conn.server.schema and any(k.lower() == "memberof" for k in conn.server.schema.attribute_types.keys()):
+                attributes.append("memberOf")
             
             conn.search(
                 search_base=cfg.user_base_dn,

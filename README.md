@@ -63,6 +63,14 @@
 - **Фоновая очередь задач**: запросы продолжают исполняться на кластере даже при закрытии вкладки браузера.
 - **Виртуализированная таблица результатов**: мгновенный просмотр больших выборок с фильтрацией, пагинацией и безопасным экспортом в CSV и JSON.
 
+### 4. Корпоративный ИИ-ассистент и SQL Linter (On-premise LLM)
+- **Комплексный линтинг и аудит**: проверка диалектов (Trino vs Hive), детекция антипаттернов производительности (`SELECT *`, отсутствие `LIMIT`, неявные `CROSS JOIN`, отсутствие фильтрации по партициям дат) и деструктивных операций (`DROP`, `TRUNCATE`, `ALTER`).
+- **Интеграция с Monaco Editor**: автоматическая подсветка замечаний и ошибок волнистыми линиями прямо в редакторе с подсказками по исправлению при наведении курсора.
+- **Пошаговое объяснение запросов (Explain)**: структурированный разбор используемых таблиц, фильтров, CTE и логики работы на естественном языке.
+- **Оптимизация в 1 клик (Optimize & Rewrite)**: генерация оптимизированного SQL с быстрым применением в редактор.
+- **Автоматическое исправление ошибок (Fix Error)**: анализ текста ошибки движка Trino/Hive и генерация исправленного SQL.
+- **Поддержка On-premise и автономного режима**: интеграция с локальными LLM-серверами (Ollama, vLLM, LiteLLM) по OpenAI-совместимому API, а при их отсутствии — автоматический переход на встроенный детерминированный `MockSQLAnalyzer` без GPU.
+
 ---
 
 ## 🏗 Архитектура решения
@@ -76,14 +84,16 @@ flowchart TD
     KDC["Kerberos KDC (Keytab & SPNEGO :88)"]
     Trino["Trino Coordinator (Impersonation X-Trino-User)"]
     Hive["Apache HiveServer2 (Impersonation doAs)"]
+    LLM["On-premise LLM (Ollama / vLLM / Mock Analyzer)"]
     DB[("База данных (PostgreSQL / SQLite PVC)")]
 
     Browser -->|HTTPS / WSS| Frontend
-    Frontend -->|REST API + SSE + Secure Cookie| Backend
+    Frontend -->|REST API + SSE + Monaco Markers| Backend
     Backend -->|1. Проверка логина и групп| LDAP
     Backend -->|2. SPNEGO / kinit сервисный тикет| KDC
     Backend -->|3. SQL + X-Trino-User| Trino
     Backend -->|4. TCLIService + doAs| Hive
+    Backend -->|5. Линтинг и оптимизация SQL| LLM
     Backend -->|История и отозванные токены| DB
 ```
 
@@ -222,6 +232,13 @@ clusters:
       method: "doAs"
     acl:
       allowed_groups: ["data-engineers"]
+
+ai:
+  enabled: true
+  provider: "openai_compatible" # openai_compatible (Ollama / vLLM) или mock (автономный режим)
+  base_url: "http://localhost:11434/v1"
+  model: "qwen2.5-coder:7b"
+  timeout_seconds: 30
 ```
 
 ---

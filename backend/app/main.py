@@ -7,9 +7,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from backend.app.core.config import settings
 from backend.app.db.session import init_db
-from backend.app.api import auth, clusters, catalog, queries
+from backend.app.api import auth, clusters, catalog, queries, ai
 
 logger = logging.getLogger("main")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -71,6 +72,8 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(clusters.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(queries.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
+
 
 @app.get("/api/health")
 @app.get("/healthz")

@@ -10,6 +10,7 @@
 backend/
 ├── app/
 │   ├── api/                     # REST API контроллеры
+│   │   ├── ai.py                # ИИ-ассистент (/api/ai/check, /explain, /optimize, /fix, /status)
 │   │   ├── auth.py              # Аутентификация (/api/auth/login, /spnego, /me, /logout)
 │   │   ├── catalog.py           # Каталог данных (/api/catalog/catalogs, schemas, tables)
 │   │   ├── clusters.py          # Доступные аналитические кластеры (/api/clusters)
@@ -17,8 +18,8 @@ backend/
 │   ├── core/                    # Ядро сервиса
 │   │   ├── acl.py               # Проверка прав (check_cluster_access, check_ui_access)
 │   │   ├── audit.py             # Журнал аудита безопасности и SQL-активности
-│   │   ├── config.py            # Pydantic Settings, загрузка config.yaml
-│   │   ├── kerberos_auth.py     # Kerberos SPNEGO аутентификация
+│   │   ├── config.py            # Pydantic Settings, конфигурация AI и загрузка config.yaml
+│   │   ├── kerberos.py          # Kerberos SPNEGO аутентификация
 │   │   ├── ldap_auth.py         # Безопасная аутентификация через LDAPS
 │   │   └── security.py          # PyJWT, HttpOnly Cookie, CSRF-защита, Rate Limiting
 │   ├── db/                      # Персистентное хранилище (SQLAlchemy / Alembic)
@@ -28,7 +29,8 @@ backend/
 │   │   ├── auth.py              # UserInfo, TokenResponse, LoginRequest
 │   │   ├── catalog.py           # Схемы каталогов, таблиц и колонок
 │   │   └── query.py             # QueryRequest, QueryStatus, QueryResult
-│   ├── services/                # Движки выполнения запросов
+│   ├── services/                # Движки выполнения запросов и аналитики
+│   │   ├── ai_service.py        # Клиент On-premise LLM и эвристический MockSQLAnalyzer
 │   │   ├── hive_engine.py       # Клиент HiveServer2 (TCLIService / Thrift / Impyla)
 │   │   ├── mock_engine.py       # Демонстрационный движок для dev-режима
 │   │   ├── query_manager.py     # Диспетчеризация, отмена и управление состоянием запросов
@@ -36,6 +38,7 @@ backend/
 │   ├── docker-entrypoint.sh     # Инициализация Kerberos (kinit) и запуск uvicorn
 │   └── main.py                  # Входная точка FastAPI, CORS, Security Headers, SPA fallback
 ├── tests/                       # Автоматические тесты (pytest)
+│   ├── test_ai_service.py       # Тесты ИИ-линтера, Mock-анализатора и AI API
 │   └── test_backend.py          # Тесты безопасности, аутентификации, CSRF, каталога и запросов
 └── requirements.txt             # Зависимости Python
 ```

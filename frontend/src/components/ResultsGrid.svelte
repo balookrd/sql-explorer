@@ -1,18 +1,21 @@
 <script lang="ts">
   import type { ColumnMeta } from '../types';
-  import { Download, Search, AlertCircle, ChevronLeft, ChevronRight, FileSpreadsheet, FileJson } from 'lucide-svelte';
+  import { Download, Search, AlertCircle, ChevronLeft, ChevronRight, FileSpreadsheet, FileJson, Wand2 } from 'lucide-svelte';
 
   let {
     columns,
     rows,
     errorMessage,
-    totalRows
+    totalRows,
+    onFixWithAi
   }: {
     columns: ColumnMeta[];
     rows: any[][];
     errorMessage: string | null;
     totalRows: number;
+    onFixWithAi?: () => void;
   } = $props();
+
 
   let filterText = $state('');
   let currentPage = $state(1);
@@ -144,13 +147,27 @@
   <!-- Область таблицы или ошибки -->
   <div class="flex-1 overflow-auto bg-white">
     {#if errorMessage}
-      <div class="p-4 m-3 rounded-xl bg-red-50 border border-red-200 text-red-800 flex items-start gap-3 text-xs shadow-2xs">
-        <AlertCircle class="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-        <div>
-          <div class="font-bold mb-1 text-red-900">Ошибка исполнения запроса</div>
-          <div class="font-mono text-[11px] whitespace-pre-wrap text-red-800">{errorMessage}</div>
+      <div class="p-4 m-3 rounded-xl bg-red-50 border border-red-200 text-red-800 flex items-start justify-between gap-3 text-xs shadow-2xs">
+        <div class="flex items-start gap-3">
+          <AlertCircle class="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <div class="font-bold mb-1 text-red-900">Ошибка исполнения запроса</div>
+            <div class="font-mono text-[11px] whitespace-pre-wrap text-red-800">{errorMessage}</div>
+          </div>
         </div>
+
+        {#if onFixWithAi}
+          <button
+            onclick={onFixWithAi}
+            class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer shrink-0"
+            title="Автоматически исправить ошибку запроса с помощью ИИ"
+          >
+            <Wand2 class="w-3.5 h-3.5" />
+            <span>Исправить с ИИ</span>
+          </button>
+        {/if}
       </div>
+
     {:else if columns.length === 0}
       <div class="h-full flex items-center justify-center text-slate-400 text-xs">
         Результаты выполнения запроса появятся здесь

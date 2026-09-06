@@ -81,6 +81,16 @@ class QueryDefaultsConfig(BaseModel):
     auto_add_limit: bool = True
     query_timeout_seconds: int = 600
 
+class AIConfig(BaseModel):
+    enabled: bool = True
+    provider: str = "openai_compatible"  # openai_compatible, ollama, mock
+    base_url: str = "http://localhost:11434/v1"
+    api_key: str = "ollama"
+    model: str = "qwen2.5-coder:7b"
+    timeout_seconds: int = 30
+    temperature: float = 0.1
+    max_tokens: int = 2048
+
 class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
@@ -98,6 +108,7 @@ class AppConfig(BaseModel):
     acl: ACLConfig = Field(default_factory=ACLConfig)
     clusters: List[ClusterConfig] = Field(default_factory=list)
     query_defaults: QueryDefaultsConfig = Field(default_factory=QueryDefaultsConfig)
+    ai: AIConfig = Field(default_factory=AIConfig)
 
 def load_config(config_path: Optional[str] = None) -> AppConfig:
     if not config_path:
@@ -136,6 +147,16 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         cfg.server.secure_cookies = os.environ["SECURE_COOKIES"].lower() in ("true", "1", "yes")
     if os.getenv("LDAP_ALLOW_INSECURE_SSL"):
         cfg.auth.ldap.allow_insecure_ssl = os.environ["LDAP_ALLOW_INSECURE_SSL"].lower() in ("true", "1", "yes")
+    if os.getenv("AI_ENABLED"):
+        cfg.ai.enabled = os.environ["AI_ENABLED"].lower() in ("true", "1", "yes")
+    if os.getenv("AI_PROVIDER"):
+        cfg.ai.provider = os.environ["AI_PROVIDER"]
+    if os.getenv("AI_BASE_URL"):
+        cfg.ai.base_url = os.environ["AI_BASE_URL"]
+    if os.getenv("AI_API_KEY"):
+        cfg.ai.api_key = os.environ["AI_API_KEY"]
+    if os.getenv("AI_MODEL"):
+        cfg.ai.model = os.environ["AI_MODEL"]
 
     return cfg
 

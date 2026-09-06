@@ -123,3 +123,17 @@ query_defaults:
   default_limit: 1000
   auto_add_limit: true
   query_timeout_seconds: 600
+
+ai:
+  enabled: true
+  # Провайдер: openai_compatible (Ollama / vLLM / LiteLLM / LocalAI) или mock (для тестов и автономного режима)
+  provider: "openai_compatible"
+  # URL локального инференс-сервера (например, Ollama: http://localhost:11434/v1 или vLLM: http://localhost:8000/v1)
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+  # Рекомендуемые On-premise модели: qwen2.5-coder:7b, deepseek-coder:6.7b, codellama:7b
+  model: "qwen2.5-coder:7b"
+  timeout_seconds: 30
+  temperature: 0.1
+  max_tokens: 2048
+
