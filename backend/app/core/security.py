@@ -207,38 +207,52 @@ async def revoke_token_in_db(
         else:
             expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=settings.auth.jwt.expire_minutes)
 
+    from backend.app.services.storage import storage_service
+    storage_service.revoke_token(token, username=username, expires_at=expires_at)
+
     now = datetime.datetime.now(datetime.timezone.utc)
-    async with AsyncSessionLocal() as db:
-        record = RevokedToken(
-            token_hash=h,
-            username=username,
-            expires_at=expires_at,
-            revoked_at=now
-        )
-        db.add(record)
-        # Очищаем из БД старые токены, срок действия которых уже истек
-        await db.execute(delete(RevokedToken).where(RevokedToken.expires_at < now))
-        await db.commit()
+    try:
+        async with AsyncSessionLocal() as db:
+            record = RevokedToken(
+                token_hash=h,
+                username=username,
+                expires_at=expires_at,
+                revoked_at=now
+            )
+            db.add(record)
+            # Очищаем из БД старые токены, срок действия которых уже истек
+            await db.execute(delete(RevokedToken).where(RevokedToken.expires_at < now))
+            await db.commit()
+    except Exception:
+        pass
 
 async def is_token_revoked_in_db(token: str) -> bool:
     """
-    Проверяет, отозван ли токен, сначала в L1 кэше, затем в БД (SQLite/PostgreSQL).
+    Проверяет, отозван ли токен, сначала в L1 кэше, затем в storage_service (Redis/PostgreSQL/SQLite), затем в Async DB.
     """
     h = hash_token(token)
     if h in _revoked_tokens_cache:
         return True
 
+    from backend.app.services.storage import storage_service
+    if storage_service.is_token_revoked(token):
+        _add_to_revoked_cache(h)
+        return True
+
     now = datetime.datetime.now(datetime.timezone.utc)
-    async with AsyncSessionLocal() as db:
-        stmt = select(RevokedToken.token_hash).where(
-            RevokedToken.token_hash == h,
-            RevokedToken.expires_at >= now
-        )
-        res = await db.execute(stmt)
-        if res.scalar_one_or_none():
-            _add_to_revoked_cache(h)
-            return True
-        return False
+    try:
+        async with AsyncSessionLocal() as db:
+            stmt = select(RevokedToken.token_hash).where(
+                RevokedToken.token_hash == h,
+                RevokedToken.expires_at >= now
+            )
+            res = await db.execute(stmt)
+            if res.scalar_one_or_none():
+                _add_to_revoked_cache(h)
+                return True
+    except Exception:
+        pass
+    return False
 
 def revoke_token(token: str):
     """Синхронная обертка для обратной совместимости"""

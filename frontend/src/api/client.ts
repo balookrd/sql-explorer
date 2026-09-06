@@ -13,7 +13,7 @@ import type {
   AIStatusResponse
 } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = '/api/v1';
 
 class ApiClient {
   // Токен хранится только в оперативной памяти JS для текущей сессии,

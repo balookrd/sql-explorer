@@ -89,20 +89,20 @@ async def test_ai_api_endpoints():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Аутентификация
-        login_resp = await client.post("/api/auth/login", json={"username": "analyst_user", "password": "password123"})
+        login_resp = await client.post("/api/v1/auth/login", json={"username": "analyst_user", "password": "password123"})
         assert login_resp.status_code == 200
         token = login_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
         # 1. GET /api/ai/status
-        status_resp = await client.get("/api/ai/status", headers=headers)
+        status_resp = await client.get("/api/v1/ai/status", headers=headers)
         assert status_resp.status_code == 200
         status_data = status_resp.json()
         assert "enabled" in status_data
 
         # 2. POST /api/ai/check
         check_resp = await client.post(
-            "/api/ai/check",
+            "/api/v1/ai/check",
             headers=headers,
             json={
                 "sql": "SELECT * FROM tpch.sf1.customer",
@@ -116,7 +116,7 @@ async def test_ai_api_endpoints():
 
         # 3. POST /api/ai/explain
         explain_resp = await client.post(
-            "/api/ai/explain",
+            "/api/v1/ai/explain",
             headers=headers,
             json={
                 "sql": "SELECT custkey, name FROM tpch.sf1.customer LIMIT 10",
@@ -130,7 +130,7 @@ async def test_ai_api_endpoints():
 
         # 4. POST /api/ai/optimize
         opt_resp = await client.post(
-            "/api/ai/optimize",
+            "/api/v1/ai/optimize",
             headers=headers,
             json={
                 "sql": "SELECT * FROM tpch.sf1.customer",
@@ -143,7 +143,7 @@ async def test_ai_api_endpoints():
 
         # 5. POST /api/ai/format
         fmt_resp = await client.post(
-            "/api/ai/format",
+            "/api/v1/ai/format",
             headers=headers,
             json={
                 "sql": "select a,b from c where x>10",
@@ -156,7 +156,7 @@ async def test_ai_api_endpoints():
 
         # 6. POST /api/ai/fix
         fix_resp = await client.post(
-            "/api/ai/fix",
+            "/api/v1/ai/fix",
             headers=headers,
             json={
                 "sql": "SELECT NVL(x, 1) FROM t",

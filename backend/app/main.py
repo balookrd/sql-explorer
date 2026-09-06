@@ -70,12 +70,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключение API роутеров
-app.include_router(auth.router, prefix="/api")
-app.include_router(clusters.router, prefix="/api")
-app.include_router(catalog.router, prefix="/api")
-app.include_router(queries.router, prefix="/api")
-app.include_router(ai.router, prefix="/api")
+# Подключение API роутеров (v1)
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(clusters.router, prefix="/api/v1")
+app.include_router(catalog.router, prefix="/api/v1")
+app.include_router(queries.router, prefix="/api/v1")
+app.include_router(ai.router, prefix="/api/v1")
 
 
 @app.get("/api/health")
