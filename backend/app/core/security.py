@@ -155,8 +155,14 @@ from backend.app.models.models import RevokedToken
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-# L1 In-memory кэш отозванных токенов для мгновенной проверки
+# L1 In-memory кэш отозванных токенов для мгновенной проверки (с ограничением размера)
 _revoked_tokens_cache: set[str] = set()
+_MAX_REVOKED_CACHE_SIZE = 10000
+
+def _add_to_revoked_cache(h: str):
+    if len(_revoked_tokens_cache) >= _MAX_REVOKED_CACHE_SIZE:
+        _revoked_tokens_cache.clear()
+    _revoked_tokens_cache.add(h)
 
 async def revoke_token_in_db(
     token: str,
@@ -168,7 +174,7 @@ async def revoke_token_in_db(
     с автоматической очисткой устаревших записей.
     """
     h = hash_token(token)
-    _revoked_tokens_cache.add(h)
+    _add_to_revoked_cache(h)
 
     if not expires_at:
         payload = decode_access_token(token)
@@ -206,13 +212,13 @@ async def is_token_revoked_in_db(token: str) -> bool:
         )
         res = await db.execute(stmt)
         if res.scalar_one_or_none():
-            _revoked_tokens_cache.add(h)
+            _add_to_revoked_cache(h)
             return True
         return False
 
 def revoke_token(token: str):
     """Синхронная обертка для обратной совместимости"""
-    _revoked_tokens_cache.add(hash_token(token))
+    _add_to_revoked_cache(hash_token(token))
 
 def is_token_revoked(token: str) -> bool:
     """Синхронная проверка по L1 кэшу"""
@@ -220,20 +226,37 @@ def is_token_revoked(token: str) -> bool:
 
 class LoginRateLimiter:
     """
-    Лимитер количества попыток аутентификации для защиты от Brute-force и Password Spraying.
+    Лимитер количества попыток аутентификации для защиты от Brute-force и Password Spraying (CWE-307 / CWE-400).
     """
-    def __init__(self, max_attempts: int = 5, window_seconds: int = 60):
+    def __init__(self, max_attempts: int = 5, window_seconds: int = 60, max_tracked_keys: int = 10000):
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
+        self.max_tracked_keys = max_tracked_keys
         self.attempts: dict[str, list[float]] = {}
+
+    def _cleanup_expired(self, now: float):
+        expired_keys = []
+        for key, timestamps in list(self.attempts.items()):
+            valid_ts = [t for t in timestamps if now - t < self.window_seconds]
+            if valid_ts:
+                self.attempts[key] = valid_ts
+            else:
+                expired_keys.append(key)
+        for k in expired_keys:
+            self.attempts.pop(k, None)
 
     def check_rate_limit(self, key: str):
         now = datetime.datetime.now(datetime.timezone.utc).timestamp()
         if key in self.attempts:
             # Очищаем попытки вне временного окна
-            self.attempts[key] = [t for t in self.attempts[key] if now - t < self.window_seconds]
-            if len(self.attempts[key]) >= self.max_attempts:
-                oldest = min(self.attempts[key])
+            valid_attempts = [t for t in self.attempts[key] if now - t < self.window_seconds]
+            if not valid_attempts:
+                self.attempts.pop(key, None)
+                return
+            self.attempts[key] = valid_attempts
+
+            if len(valid_attempts) >= self.max_attempts:
+                oldest = min(valid_attempts)
                 retry_after = max(1, int(self.window_seconds - (now - oldest)))
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -243,6 +266,13 @@ class LoginRateLimiter:
 
     def record_failed_attempt(self, key: str):
         now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+        if len(self.attempts) >= self.max_tracked_keys:
+            self._cleanup_expired(now)
+            if len(self.attempts) >= self.max_tracked_keys:
+                # Если все еще переполнено, удаляем старейший ключ
+                oldest_key = next(iter(self.attempts))
+                self.attempts.pop(oldest_key, None)
+
         if key not in self.attempts:
             self.attempts[key] = []
         self.attempts[key].append(now)
