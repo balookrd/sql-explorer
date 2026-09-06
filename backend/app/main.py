@@ -52,7 +52,10 @@ async def add_security_headers(request: Request, call_next):
         "font-src 'self' data:; "
         "connect-src 'self' ws: wss:; "
         "worker-src 'self' blob:; "
-        "frame-ancestors 'none';"
+        "frame-ancestors 'none'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
     )
     if settings.server.secure_cookies:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"

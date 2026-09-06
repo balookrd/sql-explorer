@@ -82,6 +82,72 @@ class AIStatusResponse(BaseModel):
     latency_ms: Optional[float] = None
 
 
+# --- Функции безопасности и защиты от Prompt/SQL Injection ---
+
+MAX_SQL_INPUT_CHARS = 50000
+DISALLOWED_AST_NODES = tuple([
+    node for node in [
+        getattr(exp, "Insert", None),
+        getattr(exp, "Update", None),
+        getattr(exp, "Delete", None),
+        getattr(exp, "Drop", None),
+        getattr(exp, "Alter", None),
+        getattr(exp, "Create", None),
+        getattr(exp, "Truncate", None),
+        getattr(exp, "Command", None),
+        getattr(exp, "Merge", None),
+        getattr(exp, "Grant", None),
+    ] if node is not None
+])
+
+
+def sanitize_prompt_input(text: str, max_chars: int = MAX_SQL_INPUT_CHARS) -> str:
+    """
+    Санитизирует пользовательский ввод перед отправкой в LLM:
+    - Ограничивает размер строки (защита от DoS / Token Exhaustion).
+    - Удаляет управляющие теги и попытки Prompt Injection (System Prompt Override).
+    """
+    if not text:
+        return ""
+    cleaned = str(text).strip()[:max_chars]
+    cleaned = re.sub(r"(?i)<\s*(system|instruction|sys)\s*>", "", cleaned)
+    cleaned = re.sub(r"(?i)<\s*/\s*(system|instruction|sys)\s*>", "", cleaned)
+    cleaned = re.sub(r"(?i)\[\s*(system|instruction)\s*\]", "", cleaned)
+    return cleaned
+
+
+def validate_readonly_sql_ast(sql: str, dialect: str = "trino") -> tuple[bool, Optional[str]]:
+    """
+    Проверяет, что SQL-запрос является строго Read-Only на уровне синтаксического дерева (AST) sqlglot.
+    Возвращает (is_safe, error_message).
+    """
+    sql_stripped = sql.strip()
+    if not sql_stripped:
+        return True, None
+
+    # Быстрая проверка начальной команды
+    clean_no_comments = re.sub(r"--.*?\n|/\*.*?\*/", " ", sql_stripped, flags=re.DOTALL)
+    words = clean_no_comments.strip().split()
+    if words:
+        first_word = words[0].upper()
+        if first_word in ("DROP", "TRUNCATE", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE", "MERGE", "GRANT", "REVOKE"):
+            return False, f"Команда {first_word} запрещена. Разрешены только аналитические запросы на чтение данных (SELECT / WITH / EXPLAIN / SHOW / DESCRIBE)."
+
+    sql_dialect = MockSQLAnalyzer._map_dialect(dialect)
+    try:
+        trees = sqlglot.parse(sql_stripped, read=sql_dialect)
+        for tree in trees:
+            if not tree:
+                continue
+            for disallowed_cls in DISALLOWED_AST_NODES:
+                if isinstance(tree, disallowed_cls) or tree.find(disallowed_cls):
+                    node_name = disallowed_cls.__name__.replace("Table", "").upper()
+                    return False, f"Команда {node_name} запрещена. Разрешены только аналитические запросы на чтение данных (SELECT / WITH / EXPLAIN / SHOW / DESCRIBE)."
+        return True, None
+    except Exception:
+        return True, None
+
+
 # --- Промышленный AST-анализатор SQL (sqlglot AST Linter & Optimizer) ---
 
 class MockSQLAnalyzer:
@@ -681,8 +747,9 @@ class AIService:
         catalog_context: Optional[Dict[str, Any]] = None
     ) -> AICheckResponse:
         """Комплексная проверка и линтинг SQL запроса"""
+        clean_sql = sanitize_prompt_input(sql)
         if not self.config.enabled or self.config.provider == "mock":
-            return MockSQLAnalyzer.check(sql, dialect, catalog_context)
+            return MockSQLAnalyzer.check(clean_sql, dialect, catalog_context)
 
         start_time = time.time()
         system_prompt = (
@@ -715,7 +782,7 @@ class AIService:
                     "model": self.config.model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Диалект: {dialect}\nSQL:\n```sql\n{sql}\n```"}
+                        {"role": "user", "content": f"Диалект: {dialect}\nSQL:\n```sql\n{clean_sql}\n```"}
                     ],
                     "temperature": self.config.temperature,
                     "max_tokens": self.config.max_tokens,
@@ -740,20 +807,22 @@ class AIService:
                         fallback_used=False
                     )
                 else:
-                    res = MockSQLAnalyzer.check(sql, dialect, catalog_context)
+                    res = MockSQLAnalyzer.check(clean_sql, dialect, catalog_context)
                     res.execution_time_ms = round((time.time() - start_time) * 1000, 2)
                     return res
         except Exception:
-            res = MockSQLAnalyzer.check(sql, dialect, catalog_context)
+            res = MockSQLAnalyzer.check(clean_sql, dialect, catalog_context)
             res.execution_time_ms = round((time.time() - start_time) * 1000, 2)
             return res
 
     async def format_sql(self, sql: str, dialect: str = "trino") -> AIFormatResponse:
-        return MockSQLAnalyzer.format_sql(sql, dialect)
+        clean_sql = sanitize_prompt_input(sql)
+        return MockSQLAnalyzer.format_sql(clean_sql, dialect)
 
     async def explain_query(self, sql: str, dialect: str = "trino") -> AIExplainResponse:
+        clean_sql = sanitize_prompt_input(sql)
         if not self.config.enabled or self.config.provider == "mock":
-            return MockSQLAnalyzer.explain(sql, dialect)
+            return MockSQLAnalyzer.explain(clean_sql, dialect)
         try:
             async with self._get_client() as client:
                 system_prompt = f"Ты — эксперт по SQL {dialect.upper()}. Объясни логику запроса на русском языке в JSON с полями summary, tables_used, operations, explanation."
@@ -761,7 +830,7 @@ class AIService:
                     "model": self.config.model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"SQL:\n```sql\n{sql}\n```"}
+                        {"role": "user", "content": f"SQL:\n```sql\n{clean_sql}\n```"}
                     ],
                     "temperature": 0.2,
                     "max_tokens": self.config.max_tokens,
@@ -779,12 +848,15 @@ class AIService:
                     )
         except Exception:
             pass
-        return MockSQLAnalyzer.explain(sql, dialect)
+        return MockSQLAnalyzer.explain(clean_sql, dialect)
 
     async def optimize_query(self, sql: str, dialect: str = "trino", catalog_context: Optional[Dict[str, Any]] = None) -> AIOptimizeResponse:
-        return MockSQLAnalyzer.optimize(sql, dialect, catalog_context)
+        clean_sql = sanitize_prompt_input(sql)
+        return MockSQLAnalyzer.optimize(clean_sql, dialect, catalog_context)
 
     async def fix_query(self, sql: str, dialect: str = "trino", error_message: str = "") -> AIFixResponse:
-        return MockSQLAnalyzer.fix(sql, dialect, error_message)
+        clean_sql = sanitize_prompt_input(sql)
+        clean_err = sanitize_prompt_input(error_message, max_chars=5000)
+        return MockSQLAnalyzer.fix(clean_sql, dialect, clean_err)
 
 ai_service = AIService()
