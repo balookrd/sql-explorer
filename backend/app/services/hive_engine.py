@@ -1,10 +1,22 @@
 import logging
+import re
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import anyio
 from impala.dbapi import connect as impala_connect
 from backend.app.config import ClusterConfig
 
 logger = logging.getLogger("hive_engine")
+
+IDENTIFIER_REGEX = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+def safe_hive_ident(name: str) -> str:
+    """
+    Валидирует и квотирует идентификаторы для предотвращения SQL-инъекций в Hive.
+    """
+    if not isinstance(name, str) or not IDENTIFIER_REGEX.match(name.strip()):
+        raise ValueError(f"Недопустимый SQL-идентификатор: {name}")
+    escaped = name.strip().replace('`', '')
+    return f'`{escaped}`'
 
 class HiveExecutionEngine:
     def __init__(self, cluster: ClusterConfig):
@@ -120,17 +132,20 @@ class HiveExecutionEngine:
         return await anyio.to_thread.run_sync(_fetch)
 
     async def get_tables(self, user_login: str, schema: str) -> List[str]:
+        q_schema = safe_hive_ident(schema)
         def _fetch():
             with self._get_connection(user_login) as conn:
                 cur = conn.cursor()
-                cur.execute(f"SHOW TABLES IN {schema}")
+                cur.execute(f"SHOW TABLES IN {q_schema}")
                 return [row[0] for row in cur.fetchall()]
         return await anyio.to_thread.run_sync(_fetch)
 
     async def get_columns(self, user_login: str, schema: str, table: str) -> List[Dict[str, str]]:
+        q_schema = safe_hive_ident(schema)
+        q_table = safe_hive_ident(table)
         def _fetch():
             with self._get_connection(user_login) as conn:
                 cur = conn.cursor()
-                cur.execute(f"DESCRIBE {schema}.{table}")
+                cur.execute(f"DESCRIBE {q_schema}.{q_table}")
                 return [{"name": row[0], "type": row[1]} for row in cur.fetchall()]
         return await anyio.to_thread.run_sync(_fetch)

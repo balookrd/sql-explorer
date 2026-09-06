@@ -1,6 +1,7 @@
 import os
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -8,9 +9,23 @@ from backend.app.config import settings
 from backend.app.db.session import init_db
 from backend.app.api import auth, clusters, catalog, queries
 
+logger = logging.getLogger("main")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Инициализация БД (создание таблиц при первом старте)
+    # 1. Проверка безопасности секретов при старте в боевых режимах (Fail-fast)
+    if settings.auth.mode != "mock":
+        insecure_defaults = (
+            "change-this-to-a-very-secret-random-key-in-production",
+            "secret-key-for-dev-only"
+        )
+        if settings.auth.jwt.secret_key in insecure_defaults:
+            raise RuntimeError(
+                f"КРИТИЧЕСКАЯ ОШИБКА БЕЗОПАСНОСТИ: В режиме '{settings.auth.mode}' обнаружен дефолтный JWT_SECRET_KEY! "
+                "Задайте стойкий секретный ключ через переменную окружения JWT_SECRET_KEY."
+            )
+
+    # 2. Инициализация БД (создание таблиц при первом старте)
     await init_db()
     yield
 
@@ -21,10 +36,31 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Защитные HTTP-заголовки (Security Headers Middleware)
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "worker-src 'self' blob:; "
+        "frame-ancestors 'none';"
+    )
+    if settings.server.secure_cookies:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.server.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,9 +88,15 @@ if os.path.exists(frontend_dist):
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        file_path = os.path.join(frontend_dist, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
+        # Безопасное разрешение пути с защитой от Path Traversal
+        requested_path = os.path.abspath(os.path.join(frontend_dist, full_path.lstrip("/\\")))
+        try:
+            is_safe = os.path.commonpath([frontend_dist, requested_path]) == frontend_dist
+        except ValueError:
+            is_safe = False
+
+        if is_safe and os.path.isfile(requested_path):
+            return FileResponse(requested_path)
         return FileResponse(os.path.join(frontend_dist, "index.html"))
 
 if __name__ == "__main__":

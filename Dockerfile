@@ -40,8 +40,17 @@ COPY pytest.ini ./
 # Копирование собранного Frontend из этапа 1
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
+# Создание непривилегированного пользователя appuser (UID 10001 в соответствии с Helm values)
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -m -s /bin/bash appuser && \
+    mkdir -p /app/data /etc/security/keytabs && \
+    touch /etc/krb5.conf && \
+    chown -R appuser:appuser /app /etc/krb5.conf /etc/security/keytabs
+
 # Делаем скрипт запуска исполняемым
 RUN chmod +x /app/backend/docker-entrypoint.sh
+
+USER appuser
 
 ENV CONFIG_PATH=/app/config/config.yaml \
     PYTHONUNBUFFERED=1

@@ -3,13 +3,14 @@ import uuid
 import datetime
 from typing import List, Optional, Any
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.config import settings
 from backend.app.core.security import get_current_user, UserSession
 from backend.app.core.acl import check_cluster_access
+from backend.app.core.audit import log_audit_event, AuditEventType
 from backend.app.db.session import get_db
 from backend.app.models.models import QueryHistory, SavedQuery
 from backend.app.services.query_manager import query_manager
@@ -58,8 +59,10 @@ class SaveQueryRequest(BaseModel):
 @router.post("/execute", response_model=ExecuteQueryResponse)
 async def execute_query(
     req: ExecuteQueryRequest,
+    request: Request,
     current_user: UserSession = Depends(get_current_user)
 ):
+    client_ip = request.client.host if request.client else "unknown"
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Запрос не может быть пустым")
 
@@ -68,9 +71,28 @@ async def execute_query(
         raise HTTPException(status_code=404, detail="Указанный кластер не найден")
 
     if not check_cluster_access(current_user, cluster):
+        log_audit_event(
+            AuditEventType.ACCESS_DENIED_ACL,
+            username=current_user.username,
+            client_ip=client_ip,
+            status="DENIED",
+            details={"cluster_id": req.cluster_id, "groups": current_user.groups}
+        )
         raise HTTPException(status_code=403, detail="Доступ к данному кластеру запрещен ACL")
 
     query_id = await query_manager.start_query(cluster, current_user, req.query)
+
+    log_audit_event(
+        AuditEventType.QUERY_EXECUTED,
+        username=current_user.username,
+        client_ip=client_ip,
+        status="QUEUED",
+        details={
+            "query_id": query_id,
+            "cluster_id": req.cluster_id,
+            "query_snippet": req.query[:200]
+        }
+    )
 
     return ExecuteQueryResponse(
         query_id=query_id,
@@ -101,19 +123,30 @@ async def get_queue(
 @router.delete("/queue/{query_id}")
 async def remove_from_queue(
     query_id: str,
+    request: Request,
     current_user: UserSession = Depends(get_current_user)
 ):
     """
     Останавливает выполняющийся запрос и удаляет его из очереди задач.
     """
+    client_ip = request.client.host if request.client else "unknown"
     success = await query_manager.remove_and_cancel_from_queue(query_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Запрос не найден в очереди или нет прав на удаление")
+
+    log_audit_event(
+        AuditEventType.QUERY_CANCELLED,
+        username=current_user.username,
+        client_ip=client_ip,
+        status="CANCELLED",
+        details={"query_id": query_id, "action": "remove_from_queue"}
+    )
     return {"status": "ok", "message": "Запрос остановлен и удален из очереди"}
 
 @router.get("/{query_id}/result", response_model=CachedResultResponse)
 async def get_query_result(
     query_id: str,
+    request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=500, le=5000),
     current_user: UserSession = Depends(get_current_user),
@@ -122,6 +155,7 @@ async def get_query_result(
     """
     Возвращает сохраненный на сервере результат выполнения запроса даже после закрытия вкладки.
     """
+    client_ip = request.client.host if request.client else "unknown"
     stmt = select(QueryHistory).where(QueryHistory.id == query_id)
     res = await db.execute(stmt)
     record = res.scalar_one_or_none()
@@ -130,6 +164,13 @@ async def get_query_result(
         raise HTTPException(status_code=404, detail="Запрос не найден")
 
     if not (current_user.is_admin or record.username == current_user.username):
+        log_audit_event(
+            AuditEventType.ACCESS_DENIED_BOLA,
+            username=current_user.username,
+            client_ip=client_ip,
+            status="DENIED",
+            details={"resource": "cached_result", "query_id": query_id, "owner": record.username}
+        )
         raise HTTPException(status_code=403, detail="Нет доступа к чужому результату")
 
     cached_data = await query_manager.get_cached_result(query_id, offset, limit)
@@ -141,12 +182,27 @@ async def get_query_result(
 @router.get("/{query_id}/stream")
 async def stream_query_results(
     query_id: str,
+    request: Request,
     current_user: UserSession = Depends(get_current_user)
 ):
     """
     Server-Sent Events (SSE) стриминг статуса конкретного запроса.
     """
-    queue = query_manager.subscribe(query_id)
+    client_ip = request.client.host if request.client else "unknown"
+    try:
+        queue = query_manager.subscribe(query_id, user=current_user)
+    except PermissionError:
+        log_audit_event(
+            AuditEventType.ACCESS_DENIED_BOLA,
+            username=current_user.username,
+            client_ip=client_ip,
+            status="DENIED",
+            details={"resource": "query_stream", "query_id": query_id}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ к чужому стриму запроса запрещен"
+        )
     if not queue:
         raise HTTPException(status_code=404, detail="Активный стрим запроса не найден")
 
@@ -205,11 +261,21 @@ async def stream_user_notifications(
 @router.post("/{query_id}/cancel")
 async def cancel_query(
     query_id: str,
+    request: Request,
     current_user: UserSession = Depends(get_current_user)
 ):
+    client_ip = request.client.host if request.client else "unknown"
     success = await query_manager.remove_and_cancel_from_queue(query_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Запрос не найден среди активных")
+
+    log_audit_event(
+        AuditEventType.QUERY_CANCELLED,
+        username=current_user.username,
+        client_ip=client_ip,
+        status="CANCELLED",
+        details={"query_id": query_id, "action": "cancel_query"}
+    )
     return {"status": "ok", "message": "Сигнал отмены отправлен в движок"}
 
 @router.get("/history", response_model=List[QueryHistoryItem])

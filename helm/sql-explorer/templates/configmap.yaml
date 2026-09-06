@@ -10,6 +10,11 @@ data:
       host: {{ .Values.config.server.host | quote }}
       port: {{ .Values.config.server.port }}
       debug: {{ .Values.config.server.debug }}
+      {{- if .Values.config.server.cors_origins }}
+      cors_origins:
+        {{- toYaml .Values.config.server.cors_origins | nindent 8 }}
+      {{- end }}
+      secure_cookies: {{ .Values.config.server.secure_cookies | default false }}
 
     database:
       url: {{ .Values.config.database.url | quote }}
@@ -29,6 +34,7 @@ data:
         group_filter: {{ .Values.config.auth.ldap.group_filter | quote }}
         group_name_attr: {{ .Values.config.auth.ldap.group_name_attr | quote }}
         ca_cert_file: {{ .Values.config.auth.ldap.ca_cert_file | quote }}
+        allow_insecure_ssl: {{ .Values.config.auth.ldap.allow_insecure_ssl | default false }}
 
       kerberos:
         enabled: {{ .Values.config.auth.kerberos.enabled }}

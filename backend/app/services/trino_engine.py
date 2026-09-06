@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import anyio
 import trino
@@ -6,6 +7,17 @@ from trino.auth import BasicAuthentication, KerberosAuthentication
 from backend.app.config import ClusterConfig
 
 logger = logging.getLogger("trino_engine")
+
+IDENTIFIER_REGEX = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+def safe_ident(name: str) -> str:
+    """
+    Валидирует и квотирует SQL-идентификатор для предотвращения SQL-инъекций в Trino.
+    """
+    if not isinstance(name, str) or not IDENTIFIER_REGEX.match(name.strip()):
+        raise ValueError(f"Недопустимый SQL-идентификатор: {name}")
+    escaped = name.strip().replace('"', '""')
+    return f'"{escaped}"'
 
 class TrinoExecutionEngine:
     def __init__(self, cluster: ClusterConfig):
@@ -35,7 +47,7 @@ class TrinoExecutionEngine:
         if self.cluster.impersonation.enabled:
             target_user = user_login
 
-        verify_ssl = auth_cfg.get("verify_ssl", False if self.cluster.use_ssl else True)
+        verify_ssl = auth_cfg.get("verify_ssl", True if self.cluster.use_ssl else False)
 
         conn = trino.dbapi.connect(
             host=self.cluster.host,
@@ -141,25 +153,31 @@ class TrinoExecutionEngine:
         return await anyio.to_thread.run_sync(_fetch)
 
     async def get_schemas(self, user_login: str, catalog: str) -> List[str]:
+        q_catalog = safe_ident(catalog)
         def _fetch():
             with self._get_connection(user_login) as conn:
                 cur = conn.cursor()
-                cur.execute(f"SHOW SCHEMAS FROM {catalog}")
+                cur.execute(f"SHOW SCHEMAS FROM {q_catalog}")
                 return [row[0] for row in cur.fetchall()]
         return await anyio.to_thread.run_sync(_fetch)
 
     async def get_tables(self, user_login: str, catalog: str, schema: str) -> List[str]:
+        q_catalog = safe_ident(catalog)
+        q_schema = safe_ident(schema)
         def _fetch():
             with self._get_connection(user_login) as conn:
                 cur = conn.cursor()
-                cur.execute(f"SHOW TABLES FROM {catalog}.{schema}")
+                cur.execute(f"SHOW TABLES FROM {q_catalog}.{q_schema}")
                 return [row[0] for row in cur.fetchall()]
         return await anyio.to_thread.run_sync(_fetch)
 
     async def get_columns(self, user_login: str, catalog: str, schema: str, table: str) -> List[Dict[str, str]]:
+        q_catalog = safe_ident(catalog)
+        q_schema = safe_ident(schema)
+        q_table = safe_ident(table)
         def _fetch():
             with self._get_connection(user_login) as conn:
                 cur = conn.cursor()
-                cur.execute(f"DESCRIBE {catalog}.{schema}.{table}")
+                cur.execute(f"DESCRIBE {q_catalog}.{q_schema}.{q_table}")
                 return [{"name": row[0], "type": row[1]} for row in cur.fetchall()]
         return await anyio.to_thread.run_sync(_fetch)

@@ -25,6 +25,7 @@ class LDAPConfig(BaseModel):
     group_filter: str = "(&(objectClass=group)(member={user_dn}))"
     group_name_attr: str = "cn"
     ca_cert_file: Optional[str] = None
+    allow_insecure_ssl: bool = False
 
 class KerberosConfig(BaseModel):
     enabled: bool = True
@@ -64,8 +65,7 @@ class ClusterConfig(BaseModel):
     impersonation: ImpersonationConfig = Field(default_factory=ImpersonationConfig)
     acl: ClusterAclConfig = Field(default_factory=ClusterAclConfig)
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 class UIAclConfig(BaseModel):
     allowed_users: List[str] = ["*"]
@@ -85,6 +85,8 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
+    cors_origins: List[str] = ["http://localhost:8000", "http://localhost:5173"]
+    secure_cookies: bool = False
 
 class DatabaseConfig(BaseModel):
     url: str = "sqlite+aiosqlite:///./sql_explorer.db"
@@ -119,6 +121,12 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         cfg.auth.kerberos.keytab_file = os.environ["KRB5_KEYTAB"]
     if os.getenv("KRB5_PRINCIPAL"):
         cfg.auth.kerberos.service_principal = os.environ["KRB5_PRINCIPAL"]
+    if os.getenv("CORS_ORIGINS"):
+        cfg.server.cors_origins = [o.strip() for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()]
+    if os.getenv("SECURE_COOKIES"):
+        cfg.server.secure_cookies = os.environ["SECURE_COOKIES"].lower() in ("true", "1", "yes")
+    if os.getenv("LDAP_ALLOW_INSECURE_SSL"):
+        cfg.auth.ldap.allow_insecure_ssl = os.environ["LDAP_ALLOW_INSECURE_SSL"].lower() in ("true", "1", "yes")
 
     return cfg
 

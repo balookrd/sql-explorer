@@ -33,11 +33,21 @@
     filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   );
 
+  function sanitizeForCsv(val: any): string {
+    const raw = String(val ?? '');
+    let escaped = raw.replace(/"/g, '""');
+    // Защита от CSV / Formula Injection (DDE) в Excel/Calc
+    if (/^[=+\-@\t\r]/.test(escaped)) {
+      escaped = `'${escaped}`;
+    }
+    return `"${escaped}"`;
+  }
+
   function exportToCsv() {
     if (columns.length === 0 || rows.length === 0) return;
-    const header = columns.map((c) => `"${c.name.replace(/"/g, '""')}"`).join(',');
+    const header = columns.map((c) => sanitizeForCsv(c.name)).join(',');
     const body = rows
-      .map((r) => r.map((val) => `"${String(val ?? '').replace(/"/g, '""')}"`).join(','))
+      .map((r) => r.map((val) => sanitizeForCsv(val)).join(','))
       .join('\n');
     const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

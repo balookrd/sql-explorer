@@ -2,6 +2,10 @@ server:
   host: "0.0.0.0"
   port: 8000
   debug: true
+  # Список разрешенных доменов для CORS (переопределяется через env CORS_ORIGINS)
+  cors_origins: ["http://localhost:8000", "http://localhost:5173"]
+  # Использовать secure флаг для Cookie сессий (рекомендуется true в production по HTTPS)
+  secure_cookies: false
 
 database:
   # SQLite по умолчанию. Для PostgreSQL: "postgresql+asyncpg://user:pass@localhost:5432/sql_explorer"
@@ -42,6 +46,8 @@ auth:
     group_filter: "(&(objectClass=group)(member={user_dn}))"
     group_name_attr: "cn"
     ca_cert_file: null
+    # Разрешать ли отключение проверки сертификата (только для тестовых стендов, в prod: false)
+    allow_insecure_ssl: false
 
   kerberos:
     enabled: true

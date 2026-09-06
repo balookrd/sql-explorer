@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from backend.app.config import settings, ClusterConfig
@@ -10,6 +11,16 @@ from backend.app.services.mock_engine import MockExecutionEngine
 
 logger = logging.getLogger("catalog_api")
 router = APIRouter(prefix="/catalog", tags=["catalog"])
+
+IDENTIFIER_REGEX = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+def validate_identifier(name: str, field_name: str = "идентификатор") -> str:
+    if not isinstance(name, str) or not IDENTIFIER_REGEX.match(name.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Недопустимые символы в параметре {field_name}: '{name}'"
+        )
+    return name.strip()
 
 def _get_cluster_or_404(cluster_id: str, user: UserSession) -> ClusterConfig:
     cluster = next((c for c in settings.clusters if c.id == cluster_id), None)
@@ -46,6 +57,7 @@ async def get_schemas(
     catalog: str = Query(default="hive"),
     current_user: UserSession = Depends(get_current_user)
 ):
+    catalog = validate_identifier(catalog, "catalog")
     cluster = _get_cluster_or_404(cluster_id, current_user)
     engine = _get_engine(cluster)
     try:
@@ -67,6 +79,8 @@ async def get_tables(
     schema: str = Query(default="default"),
     current_user: UserSession = Depends(get_current_user)
 ):
+    catalog = validate_identifier(catalog, "catalog")
+    schema = validate_identifier(schema, "schema")
     cluster = _get_cluster_or_404(cluster_id, current_user)
     engine = _get_engine(cluster)
     try:
@@ -89,6 +103,9 @@ async def get_columns(
     table: str = Query(...),
     current_user: UserSession = Depends(get_current_user)
 ):
+    catalog = validate_identifier(catalog, "catalog")
+    schema = validate_identifier(schema, "schema")
+    table = validate_identifier(table, "table")
     cluster = _get_cluster_or_404(cluster_id, current_user)
     engine = _get_engine(cluster)
     try:

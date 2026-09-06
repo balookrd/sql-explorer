@@ -340,10 +340,12 @@ class QueryManager:
             if d in ctx.subscribers:
                 ctx.subscribers.remove(d)
 
-    def subscribe(self, query_id: str) -> Optional[asyncio.Queue]:
+    def subscribe(self, query_id: str, user: Optional[UserSession] = None) -> Optional[asyncio.Queue]:
         ctx = self.active_executions.get(query_id)
         if not ctx:
             return None
+        if user and not (user.is_admin or ctx.user.username == user.username):
+            raise PermissionError("Доступ к чужому стриму запрещен")
         q = asyncio.Queue()
         ctx.subscribers.append(q)
         return q

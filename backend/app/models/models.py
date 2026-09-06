@@ -42,3 +42,11 @@ class SavedQuery(Base):
     is_shared = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    token_hash = Column(String(64), primary_key=True, index=True)  # SHA-256 хэш JWT
+    username = Column(String(128), index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    revoked_at = Column(DateTime, default=utcnow, nullable=False)

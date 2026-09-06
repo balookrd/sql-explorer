@@ -3,15 +3,17 @@ import type { UserSession, ClusterSummary, QueryHistoryItem, SavedQueryItem, Col
 const API_BASE = '/api';
 
 class ApiClient {
-  private token: string | null = localStorage.getItem('access_token');
+  // Токен хранится только в оперативной памяти JS для текущей сессии,
+  // предотвращая постоянную компрометацию через XSS / LocalStorage.
+  // Основная аутентификация в браузере выполняется через безопасные HttpOnly Cookie.
+  private token: string | null = null;
 
   setToken(token: string | null) {
     this.token = token;
-    if (token) {
-      localStorage.setItem('access_token', token);
-    } else {
+    // Очищаем legacy-токен из localStorage, если он был записан ранее
+    try {
       localStorage.removeItem('access_token');
-    }
+    } catch (_) {}
   }
 
   getToken(): string | null {
@@ -134,8 +136,7 @@ class ApiClient {
   }
 
   streamQueryEvents(queryId: string, onEvent: (event: any) => void, onError?: (err: any) => void): () => void {
-    const tokenParam = this.token ? `?token=${encodeURIComponent(this.token)}` : '';
-    const eventSource = new EventSource(`${API_BASE}/queries/${queryId}/stream${tokenParam}`, {
+    const eventSource = new EventSource(`${API_BASE}/queries/${queryId}/stream`, {
       withCredentials: true
     });
 
@@ -162,8 +163,7 @@ class ApiClient {
   }
 
   listenUserNotifications(onEvent: (event: any) => void): () => void {
-    const tokenParam = this.token ? `?token=${encodeURIComponent(this.token)}` : '';
-    const eventSource = new EventSource(`${API_BASE}/queries/notifications/stream${tokenParam}`, {
+    const eventSource = new EventSource(`${API_BASE}/queries/notifications/stream`, {
       withCredentials: true
     });
 

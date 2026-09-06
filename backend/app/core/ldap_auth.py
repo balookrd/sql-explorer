@@ -3,6 +3,7 @@ import logging
 from typing import Optional, Dict, Any, List
 from ldap3 import Server, Connection, ALL, Tls, SUBTREE
 from ldap3.core.exceptions import LDAPException, LDAPBindError
+from ldap3.utils.conv import escape_filter_chars
 from backend.app.config import settings
 
 logger = logging.getLogger("ldap_auth")
@@ -20,20 +21,24 @@ def authenticate_ldap(username: str, password: str) -> Optional[Dict[str, Any]]:
     if cfg.use_ssl:
         if cfg.ca_cert_file:
             tls_config = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=cfg.ca_cert_file)
-        else:
+        elif cfg.allow_insecure_ssl:
+            logger.warning("ВНИМАНИЕ: Проверка сертификата LDAPS отключена (allow_insecure_ssl=True)")
             tls_config = Tls(validate=ssl.CERT_NONE)
+        else:
+            tls_config = Tls(validate=ssl.CERT_REQUIRED)
 
     try:
         # 1. Подключение к серверу каталогов
-        server = Server(cfg.server_uri, use_ssl=cfg.use_ssl, tls=tls_config, get_info=ALL)
+        server = Server(cfg.server_uri, use_ssl=cfg.use_ssl, tls=tls_config, get_info=ALL, connect_timeout=5)
         
         # 2. Сервисный BIND (если настроен) или анонимный поиск
         bind_user = cfg.bind_dn if cfg.bind_dn else None
         bind_pwd = cfg.bind_password if cfg.bind_password else None
 
         with Connection(server, user=bind_user, password=bind_pwd, auto_bind=True) as conn:
-            # 3. Поиск пользователя по логину
-            search_filter = cfg.user_filter.format(username=username)
+            # 3. Поиск пользователя по логину с защитой от LDAP Injection
+            escaped_username = escape_filter_chars(username)
+            search_filter = cfg.user_filter.format(username=escaped_username)
             attributes = [cfg.user_display_name_attr, cfg.user_email_attr, "memberOf", "dn"]
             
             conn.search(
@@ -70,7 +75,10 @@ def authenticate_ldap(username: str, password: str) -> Optional[Dict[str, Any]]:
 
             # Если группы хранятся в group_base_dn с фильтром member={user_dn}
             if cfg.group_base_dn and not groups:
-                group_filter = cfg.group_filter.format(user_dn=user_dn, username=username)
+                group_filter = cfg.group_filter.format(
+                    user_dn=escape_filter_chars(str(user_dn)),
+                    username=escaped_username
+                )
                 conn.search(
                     search_base=cfg.group_base_dn,
                     search_filter=group_filter,

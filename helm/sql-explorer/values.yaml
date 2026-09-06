@@ -101,6 +101,9 @@ config:
     host: "0.0.0.0"
     port: 8000
     debug: false
+    cors_origins:
+      - "https://sql-explorer.example.com"
+    secure_cookies: true
 
   database:
     # SQLite по умолчанию: "sqlite+aiosqlite:////app/data/sql_explorer.db"
@@ -123,6 +126,7 @@ config:
       group_filter: "(&(objectClass=group)(member={user_dn}))"
       group_name_attr: "cn"
       ca_cert_file: "/etc/ssl/certs/ldap-ca.crt"
+      allow_insecure_ssl: false
 
     kerberos:
       enabled: true
