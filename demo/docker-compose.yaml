@@ -1,3 +1,5 @@
+name: sql-explorer-demo
+
 networks:
   sql-demo-net:
     driver: bridge
