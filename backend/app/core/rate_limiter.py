@@ -47,4 +47,4 @@ class RateLimiter:
         self.check_limit(key=f"ip:{client_ip}", request=request)
 
 
-auth_rate_limiter = RateLimiter(max_requests=10, window_seconds=60)
+auth_rate_limiter = RateLimiter(max_requests=5, window_seconds=60)

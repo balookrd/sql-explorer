@@ -74,7 +74,7 @@ class ApiClient {
   }
 
   async kerberosNegotiate(): Promise<{ access_token: string; user: UserSession }> {
-    const data = await this.request<{ access_token: string; user: UserSession }>('/auth/negotiate');
+    const data = await this.request<{ access_token: string; user: UserSession }>('/auth/sso');
     this.setToken(data.access_token);
     return data;
   }

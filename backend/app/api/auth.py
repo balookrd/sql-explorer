@@ -9,9 +9,9 @@ from backend.app.core.security import (
     get_client_ip,
     UserSession,
     revoke_token_in_db,
-    login_rate_limiter,
     verify_csrf
 )
+from backend.app.core.rate_limiter import auth_rate_limiter
 from backend.app.core.acl import check_ui_access
 from backend.app.core.ldap_auth import authenticate_ldap, get_ldap_user_info
 from backend.app.core.kerberos import authenticate_spnego
@@ -32,18 +32,7 @@ class AuthResponse(BaseModel):
 async def login(req: LoginRequest, request: Request, response: Response):
     client_ip = get_client_ip(request)
     rate_key = f"{client_ip}:{req.username}"
-    try:
-        login_rate_limiter.check_rate_limit(rate_key)
-    except HTTPException as e:
-        if e.status_code == 429:
-            log_audit_event(
-                AuditEventType.AUTH_RATE_LIMITED,
-                username=req.username,
-                client_ip=client_ip,
-                status="BLOCKED",
-                details={"rate_key": rate_key}
-            )
-        raise
+    auth_rate_limiter.check_limit(rate_key, request)
 
     user_info = None
 
@@ -65,7 +54,6 @@ async def login(req: LoginRequest, request: Request, response: Response):
         user_info = authenticate_ldap(req.username, req.password)
 
     if not user_info:
-        login_rate_limiter.record_failed_attempt(rate_key)
         log_audit_event(
             AuditEventType.AUTH_LOGIN_FAILED,
             username=req.username,
@@ -77,9 +65,6 @@ async def login(req: LoginRequest, request: Request, response: Response):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверное имя пользователя или пароль"
         )
-
-    # При успешной аутентификации сбрасываем счетчик неудач
-    login_rate_limiter.reset(rate_key)
 
     # Проверка ACL на доступ к Web-UI
     admin_groups = set(settings.acl.ui_access.admin_groups)
@@ -137,7 +122,7 @@ async def login(req: LoginRequest, request: Request, response: Response):
 
     return AuthResponse(access_token=access_token, user=session_user)
 
-@router.get("/negotiate")
+@router.get("/sso")
 async def kerberos_negotiate(request: Request, response: Response):
     """
     Эндпоинт для Kerberos SPNEGO SSO.

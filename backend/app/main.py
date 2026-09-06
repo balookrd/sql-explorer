@@ -78,7 +78,6 @@ app.include_router(queries.router, prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
 
 
-@app.get("/api/health")
 @app.get("/healthz")
 async def health():
     return {

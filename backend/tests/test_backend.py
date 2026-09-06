@@ -8,7 +8,7 @@ async def test_health():
     await init_db()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/health")
+        resp = await client.get("/healthz")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
@@ -392,7 +392,7 @@ async def test_spnego_kerberos_ldap_enrichment(monkeypatch):
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/v1/auth/negotiate", headers={"Authorization": "Negotiate YWJjMTIz"})
+        resp = await client.get("/api/v1/auth/sso", headers={"Authorization": "Negotiate YWJjMTIz"})
         assert resp.status_code == 200
         user = resp.json()["user"]
         assert user["username"] == "sso_user"

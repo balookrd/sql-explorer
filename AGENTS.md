@@ -21,7 +21,7 @@
 Хотя код каждого проекта хранится локально и автономно (для независимой сборки Docker-образов без внешних зависимостей), все три проекта **строго следуют единому архитектурному контракту**:
 
 ### А. Универсальное хранилище Tri-Storage (`StorageService`)
-- **Расположение**: `backend/app/services/storage.py` (экспортирует синглтон `storage_service`; в `hdfs-explorer` модуль `app/core/token_blacklist.py` оставлен как алиас).
+- **Расположение**: `backend/app/services/storage.py` (экспортирует синглтон `storage_service` во всех трех проектах без каких-либо легаси-алиасов).
 - **Поддерживаемые бэкенды**:
   1. **Redis (`redis://...`, `rediss://...`)**:
      - *Rate Limiting*: атомарное скользящее окно через Sorted Set (`ratelimit:{key}`).
@@ -69,13 +69,25 @@
   - `POST /api/v1/auth/login` — аутентификация (LDAP, Mock, Hybrid) с выдачей JWT и/или сессионной куки.
   - `POST /api/v1/auth/logout` — выход из системы, проверка CSRF и серверный отзыв токена.
   - `GET  /api/v1/auth/me` — профиль текущего пользователя, системная роль и группы.
-  - `POST /api/v1/auth/spnego` (или `/negotiate`, `/sso`) — Kerberos SPNEGO SSO аутентификация.
+  - `GET  /api/v1/auth/sso` — единый канонический Kerberos SPNEGO SSO эндпоинт.
 - **Кластеры и бизнес-сущности**:
   - `sql-explorer`: `/api/v1/clusters`, `/api/v1/catalog`, `/api/v1/queries`, `/api/v1/ai`
   - `hdfs-explorer`: `/api/v1/clusters`, `/api/v1/clusters/{id}/files`, `/api/v1/clusters/cross-copy`
   - `yarn-explorer`: `/api/v1/clusters`, `/api/v1/clusters/{id}/queues`, `/api/v1/change-requests`
+- **Системный Healthcheck**:
+  - `GET /healthz` — единый стандартный эндпоинт для Kubernetes liveness/readiness probes во всех сервисах.
 
 ### Ж. Валидация безопасности Production-окружения (`validate_production_security`)
+- При отключенном режиме отладки (`server.debug: false` или `SERVER_DEBUG=false`):
+  1. Строго запрещен `mode: "mock"` (блокировка запуска с обходом аутентификации).
+  2. Запрещены стандартные и короткие (< 32 символов) секретные ключи JWT (`JWT_SECRET_KEY`).
+  3. Требуется включенная проверка TLS-сертификатов (`verify_cert: true`).
+
+### З. Нулевая обратная совместимость (Zero Backward Compatibility / No Legacy)
+Проекты являются новыми и развиваются без оглядки на устаревшие версии:
+- Запрещены любые легаси-алиасы (файлы вроде `token_blacklist.py`, синонимы роутов вроде `/negotiate` или `/api/health`).
+- Запрещены устаревшие in-memory структуры лимитирования в пользу единого `StorageService`.
+- Запрещены дублирующие роуты с trailing slash (`/clusters/` vs `/clusters`).
 - При отключенном режиме отладки (`server.debug: false` или `SERVER_DEBUG=false`):
   1. Строго запрещен `mode: "mock"` (блокировка запуска с обходом аутентификации).
   2. Запрещены стандартные и короткие (< 32 символов) секретные ключи JWT (`JWT_SECRET_KEY`).

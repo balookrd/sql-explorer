@@ -194,41 +194,18 @@ async def revoke_token_in_db(
     expires_at: Optional[datetime.datetime] = None
 ):
     """
-    Отзывает JWT токен и сохраняет его хэш в персистентную БД (SQLite/PostgreSQL)
-    с автоматической очисткой устаревших записей.
+    Отзывает JWT токен через StorageService (Redis/PostgreSQL/SQLite).
     """
     h = hash_token(token)
     _add_to_revoked_cache(h)
 
-    if not expires_at:
-        payload = decode_access_token(token)
-        if payload and "exp" in payload:
-            expires_at = datetime.datetime.fromtimestamp(payload["exp"], tz=datetime.timezone.utc)
-        else:
-            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=settings.auth.jwt.expire_minutes)
-
     from backend.app.services.storage import storage_service
     storage_service.revoke_token(token, username=username, expires_at=expires_at)
 
-    now = datetime.datetime.now(datetime.timezone.utc)
-    try:
-        async with AsyncSessionLocal() as db:
-            record = RevokedToken(
-                token_hash=h,
-                username=username,
-                expires_at=expires_at,
-                revoked_at=now
-            )
-            db.add(record)
-            # Очищаем из БД старые токены, срок действия которых уже истек
-            await db.execute(delete(RevokedToken).where(RevokedToken.expires_at < now))
-            await db.commit()
-    except Exception:
-        pass
 
 async def is_token_revoked_in_db(token: str) -> bool:
     """
-    Проверяет, отозван ли токен, сначала в L1 кэше, затем в storage_service (Redis/PostgreSQL/SQLite), затем в Async DB.
+    Проверяет отзыв токена через L1 in-memory кэш и StorageService.
     """
     h = hash_token(token)
     if h in _revoked_tokens_cache:
@@ -238,87 +215,7 @@ async def is_token_revoked_in_db(token: str) -> bool:
     if storage_service.is_token_revoked(token):
         _add_to_revoked_cache(h)
         return True
-
-    now = datetime.datetime.now(datetime.timezone.utc)
-    try:
-        async with AsyncSessionLocal() as db:
-            stmt = select(RevokedToken.token_hash).where(
-                RevokedToken.token_hash == h,
-                RevokedToken.expires_at >= now
-            )
-            res = await db.execute(stmt)
-            if res.scalar_one_or_none():
-                _add_to_revoked_cache(h)
-                return True
-    except Exception:
-        pass
     return False
-
-def revoke_token(token: str):
-    """Синхронная обертка для обратной совместимости"""
-    _add_to_revoked_cache(hash_token(token))
-
-def is_token_revoked(token: str) -> bool:
-    """Синхронная проверка по L1 кэшу"""
-    return hash_token(token) in _revoked_tokens_cache
-
-class LoginRateLimiter:
-    """
-    Лимитер количества попыток аутентификации для защиты от Brute-force и Password Spraying (CWE-307 / CWE-400).
-    """
-    def __init__(self, max_attempts: int = 5, window_seconds: int = 60, max_tracked_keys: int = 10000):
-        self.max_attempts = max_attempts
-        self.window_seconds = window_seconds
-        self.max_tracked_keys = max_tracked_keys
-        self.attempts: dict[str, list[float]] = {}
-
-    def _cleanup_expired(self, now: float):
-        expired_keys = []
-        for key, timestamps in list(self.attempts.items()):
-            valid_ts = [t for t in timestamps if now - t < self.window_seconds]
-            if valid_ts:
-                self.attempts[key] = valid_ts
-            else:
-                expired_keys.append(key)
-        for k in expired_keys:
-            self.attempts.pop(k, None)
-
-    def check_rate_limit(self, key: str):
-        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
-        if key in self.attempts:
-            # Очищаем попытки вне временного окна
-            valid_attempts = [t for t in self.attempts[key] if now - t < self.window_seconds]
-            if not valid_attempts:
-                self.attempts.pop(key, None)
-                return
-            self.attempts[key] = valid_attempts
-
-            if len(valid_attempts) >= self.max_attempts:
-                oldest = min(valid_attempts)
-                retry_after = max(1, int(self.window_seconds - (now - oldest)))
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Слишком много неудачных попыток входа. Пожалуйста, подождите {retry_after} секунд.",
-                    headers={"Retry-After": str(retry_after)}
-                )
-
-    def record_failed_attempt(self, key: str):
-        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
-        if len(self.attempts) >= self.max_tracked_keys:
-            self._cleanup_expired(now)
-            if len(self.attempts) >= self.max_tracked_keys:
-                # Если все еще переполнено, удаляем старейший ключ
-                oldest_key = next(iter(self.attempts))
-                self.attempts.pop(oldest_key, None)
-
-        if key not in self.attempts:
-            self.attempts[key] = []
-        self.attempts[key].append(now)
-
-    def reset(self, key: str):
-        self.attempts.pop(key, None)
-
-login_rate_limiter = LoginRateLimiter()
 
 async def get_current_user(
     request: Request,
