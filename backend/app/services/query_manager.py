@@ -120,6 +120,9 @@ class QueryManager:
                 result.append(' ')
                 i += 1
                 while i < n:
+                    if sql[i] == "\\" and i + 1 < n:
+                        i += 2
+                        continue
                     if sql[i] == "'":
                         if i + 1 < n and sql[i + 1] == "'":
                             i += 2
@@ -134,6 +137,9 @@ class QueryManager:
                 result.append(' ')
                 i += 1
                 while i < n:
+                    if sql[i] == "\\" and i + 1 < n:
+                        i += 2
+                        continue
                     if sql[i] == '"':
                         if i + 1 < n and sql[i + 1] == '"':
                             i += 2

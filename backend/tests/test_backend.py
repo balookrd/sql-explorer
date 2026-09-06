@@ -501,5 +501,20 @@ def test_engines_timeout_passing(monkeypatch):
     assert captured_trino_kwargs.get("request_timeout") == 300.0
 
 
+def test_sanitizer_escaped_quotes():
+    from backend.app.services.query_manager import query_manager
+
+    # Проверка, что экранированная кавычка \' не ломает удаление строк и парсинг
+    sql_with_escaped_quote = "SELECT * FROM users WHERE note = 'O\\'Reilly' AND status = 1"
+    cleaned = query_manager._strip_comments_and_strings(sql_with_escaped_quote)
+    # В очищенном SQL не должно остаться 'Reilly' как SQL кода
+    assert "Reilly" not in cleaned
+    assert "status = 1" in cleaned
+
+    # Проверка автоматического добавления LIMIT к запросу с экранированными кавычками
+    processed = query_manager._sanitize_and_limit_query(sql_with_escaped_quote)
+    assert processed.endswith("LIMIT 1000")
+
+
 
 
