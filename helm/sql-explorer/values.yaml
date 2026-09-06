@@ -1,4 +1,6 @@
-replicaCount: 2
+# Количество реплик. Внимание: при использовании локальной SQLite БД поддерживается только 1 реплика (replicaCount: 1).
+# Для запуска 2 и более реплик настройте внешний PostgreSQL (config.database.url: postgresql+asyncpg://...).
+replicaCount: 1
 
 image:
   repository: sql-explorer
@@ -201,6 +203,8 @@ config:
 secrets:
   jwtSecret: "replace-with-a-very-long-random-string-in-production"
   ldapBindPassword: "YourLdapServiceAccountPassword"
+  # Пароль базы данных PostgreSQL (опционально)
+  databasePassword: ""
   # Base64-закодированный бинарный keytab файл (опционально)
   kerberosKeytabBase64: ""
 

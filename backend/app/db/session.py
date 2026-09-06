@@ -4,11 +4,27 @@ from backend.app.core.config import settings
 
 Base = declarative_base()
 
+db_url = settings.database.url
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
+engine_kwargs = {
+    "echo": settings.server.debug,
+    "future": True,
+}
+if "sqlite" not in db_url:
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_size": 10,
+        "max_overflow": 20,
+    })
+
 # Настройка асинхронного engine
 engine = create_async_engine(
-    settings.database.url,
-    echo=settings.server.debug,
-    future=True
+    db_url,
+    **engine_kwargs
 )
 
 AsyncSessionLocal = async_sessionmaker(

@@ -6,7 +6,12 @@ metadata:
     {{- include "sql-explorer.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
+  {{- $dbUrl := .Values.config.database.url | default "" -}}
+  {{- if and (or (hasPrefix "sqlite" $dbUrl) (eq $dbUrl "")) (gt (.Values.replicaCount | int) 1) }}
+  replicas: 1
+  {{- else }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   {{- end }}
   selector:
     matchLabels:
@@ -52,6 +57,13 @@ spec:
                 secretKeyRef:
                   name: {{ include "sql-explorer.fullname" . }}-secrets
                   key: ldap-password
+            {{- if .Values.secrets.databasePassword }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sql-explorer.fullname" . }}-secrets
+                  key: database-password
+            {{- end }}
             {{- if .Values.config.auth.kerberos.service_principal }}
             - name: KRB5_PRINCIPAL
               value: {{ .Values.config.auth.kerberos.service_principal | quote }}
