@@ -42,6 +42,7 @@ ingress:
 secrets:
   jwtSecret: "SuperSecretLongRandomKeyForProductionJWTToken12345"
   ldapBindPassword: "SecretServiceAccountPassword"
+  databasePassword: "SecretPostgresPassword123"
   # base64 -w 0 /path/to/sql-explorer.keytab
   kerberosKeytabBase64: "BQIAAAA4AA..."
 

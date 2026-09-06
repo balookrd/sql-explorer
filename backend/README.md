@@ -65,6 +65,13 @@ backend/
 6. **Безопасность аналитических запросов**:
    - Проброс пользователя (`X-Trino-User` в Trino и `doAs` в Hive) для соблюдения политик доступа Ranger / Sentry.
    - Многоуровневый анализ SQL для безопасного автодобавления `LIMIT` и таймауты сетевых сокетов движков.
+7. **Безопасность ИИ (AI Safety & Prompt Sanitization)**:
+   - Входная санитизация `sanitize_prompt_input`: нейтрализация injection-маркеров и очистка управляющих символов.
+   - Глубокая Read-Only валидация `validate_readonly_sql_ast` через `sqlglot` для гарантированного запрета выполнения деструктивных запросов.
+8. **Защитные заголовки Content-Security-Policy (CSP)**:
+   - Защита от XSS и инъекций (`default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`).
+9. **Поддержка PostgreSQL и SQLite**:
+   - Асинхронное подключение через `SQLAlchemy` (`postgresql+asyncpg` / `aiosqlite`) с пулом соединений и автоматической защитой concurrency.
 
 ---
 
